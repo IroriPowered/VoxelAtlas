@@ -1,4 +1,4 @@
-package fr.boul2gom.hymap.netty.network;
+package fr.boul2gom.voxelaltas.netty.network;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;

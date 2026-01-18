@@ -1,20 +1,18 @@
-package fr.boul2gom.hymap.dynmap;
+package fr.boul2gom.voxelaltas.dynmap;
 
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.dynmap.data.WorldDataProvider;
-import fr.boul2gom.hymap.netty.NettyServer;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.dynmap.data.WorldDataProvider;
+import fr.boul2gom.voxelaltas.netty.NettyServer;
 import io.netty.channel.Channel;
 import io.netty.channel.group.ChannelGroup;
 import io.netty.channel.group.DefaultChannelGroup;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.concurrent.GlobalEventExecutor;
 
-import java.util.*;
 import java.util.concurrent.*;
 
 public class PlayerTracker {
@@ -22,13 +20,13 @@ public class PlayerTracker {
     private final ChannelGroup channels;
     private ScheduledExecutorService pool;
 
-    public PlayerTracker(HytaleMap plugin) {
+    public PlayerTracker(VoxelAtlas plugin) {
         this.channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     }
 
     public void start() {
         final ThreadFactory factory = (runnable -> {
-            Thread thread = new Thread(runnable, "HytaleMap - Tracker");
+            Thread thread = new Thread(runnable, "VoxelAtlas - Tracker");
             thread.setDaemon(true);
             return thread;
         });
@@ -36,7 +34,7 @@ public class PlayerTracker {
         this.pool = Executors.newScheduledThreadPool(2, factory);
         this.pool.scheduleAtFixedRate(this::broadcast_positions, 5, 5, TimeUnit.SECONDS);
 
-        System.out.println("[HytaleMap] Player tracker started - Broadcasting every 5 seconds");
+        System.out.println("[VoxelAtlas] Player tracker started - Broadcasting every 5 seconds");
     }
 
     public void shutdown() {
@@ -53,17 +51,17 @@ public class PlayerTracker {
         }
 
         this.channels.close().awaitUninterruptibly();
-        System.out.println("[HytaleMap] Player tracker shutdown complete");
+        System.out.println("[VoxelAtlas] Player tracker shutdown complete");
     }
 
     public void add_channel(Channel channel) {
         this.channels.add(channel);
-        System.out.println("[HytaleMap] Channel added to tracker: " + channel.remoteAddress());
+        System.out.println("[VoxelAtlas] Channel added to tracker: " + channel.remoteAddress());
     }
 
     public void remove_channel(Channel channel) {
         this.channels.remove(channel);
-        System.out.println("[HytaleMap] Channel removed from tracker: " + channel.remoteAddress());
+        System.out.println("[VoxelAtlas] Channel removed from tracker: " + channel.remoteAddress());
     }
 
     public int connections_count() {
@@ -94,11 +92,11 @@ public class PlayerTracker {
 
         this.channels.writeAndFlush(frame, Channel::isActive).addListener(future -> {
             if (!future.isSuccess()) {
-                System.err.println("[HytaleMap] Failed to broadcast player positions: " + future.cause().getMessage());
+                System.err.println("[VoxelAtlas] Failed to broadcast player positions: " + future.cause().getMessage());
             }
         });
 
-        System.out.println("[HytaleMap] Broadcasted positions to " + this.channels.size() + " clients");
+        System.out.println("[VoxelAtlas] Broadcasted positions to " + this.channels.size() + " clients");
     }
 
     public ChannelGroup channels() {

@@ -1,4 +1,4 @@
-package fr.boul2gom.hymap.dynmap.encoder;
+package fr.boul2gom.voxelaltas.dynmap.encoder;
 
 import com.hypixel.hytale.protocol.packets.worldmap.MapImage;
 
@@ -26,10 +26,10 @@ public class WebpEncoder {
         WEBP_AVAILABLE = writers.hasNext();
 
         if (!WEBP_AVAILABLE) {
-            System.err.println("[HytaleMap] WebP encoder not available. Please add webp-imageio dependency.");
-            System.err.println("[HytaleMap] Falling back to PNG encoder for all requests.");
+            System.err.println("[VoxelAtlas] WebP encoder not available. Please add webp-imageio dependency.");
+            System.err.println("[VoxelAtlas] Falling back to PNG encoder for all requests.");
         } else {
-            System.out.println("[HytaleMap] WebP encoder initialized successfully");
+            System.out.println("[VoxelAtlas] WebP encoder initialized successfully");
         }
     }
 
@@ -53,7 +53,7 @@ public class WebpEncoder {
     public static byte[] encode(MapImage image, int outputSize, float quality) {
         if (!WEBP_AVAILABLE) {
             // Fallback to PNG if WebP is not available
-            System.err.println("[HytaleMap] WebP not available, falling back to PNG");
+            System.err.println("[VoxelAtlas] WebP not available, falling back to PNG");
             return PngEncoder.encode(image, outputSize);
         }
 
@@ -127,7 +127,7 @@ public class WebpEncoder {
             // Get WebP writer
             Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("webp");
             if (!writers.hasNext()) {
-                System.err.println("[HytaleMap] No WebP writer found");
+                System.err.println("[VoxelAtlas] No WebP writer found");
                 return new byte[0];
             }
 
@@ -149,7 +149,7 @@ public class WebpEncoder {
 
             return out.toByteArray();
         } catch (IOException e) {
-            System.err.println("[HytaleMap] Failed to encode WebP: " + e.getMessage());
+            System.err.println("[VoxelAtlas] Failed to encode WebP: " + e.getMessage());
             return new byte[0];
         }
     }

@@ -228,7 +228,7 @@ function init_map() {
         document.getElementById('coords-display').textContent = `X: ${x}, Z: ${z}`;
     });
 
-    map.attributionControl.addAttribution('HytaleMap');
+    map.attributionControl.addAttribution('VoxelAtlas');
 }
 
 function update_tile_layer() {

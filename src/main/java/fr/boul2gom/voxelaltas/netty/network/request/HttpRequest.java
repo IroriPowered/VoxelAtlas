@@ -1,8 +1,8 @@
-package fr.boul2gom.hymap.netty.network.request;
+package fr.boul2gom.voxelaltas.netty.network.request;
 
 import com.google.gson.JsonObject;
-import fr.boul2gom.hymap.netty.NettyServer;
-import fr.boul2gom.hymap.netty.network.HttpContext;
+import fr.boul2gom.voxelaltas.netty.NettyServer;
+import fr.boul2gom.voxelaltas.netty.network.HttpContext;
 import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.http.*;
 

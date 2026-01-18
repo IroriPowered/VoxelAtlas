@@ -1,8 +1,8 @@
-package fr.boul2gom.hymap.netty.router;
+package fr.boul2gom.voxelaltas.netty.router;
 
-import fr.boul2gom.hymap.netty.network.HttpContext;
-import fr.boul2gom.hymap.netty.network.request.HttpRequest;
-import fr.boul2gom.hymap.netty.network.request.IHttpRequestHandler;
+import fr.boul2gom.voxelaltas.netty.network.HttpContext;
+import fr.boul2gom.voxelaltas.netty.network.request.HttpRequest;
+import fr.boul2gom.voxelaltas.netty.network.request.IHttpRequestHandler;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -24,13 +24,13 @@ public class HttpRouter {
     }
 
     public void dispatch(String[] path, HttpRequest request, HttpContext context) {
-        System.out.println("[HytaleMap] Router '" + this.path + "' dispatching path: " + Arrays.toString(path));
+        System.out.println("[VoxelAtlas] Router '" + this.path + "' dispatching path: " + Arrays.toString(path));
 
         if (path.length == 0) {
             final Map<String, IHttpRequestHandler> handlers = this.handlers.get(request.method());
 
             if (handlers != null) {
-                System.out.println("[HytaleMap] Looking for handler '/' in handlers: " + handlers.keySet());
+                System.out.println("[VoxelAtlas] Looking for handler '/' in handlers: " + handlers.keySet());
                 IHttpRequestHandler handler = handlers.get("/");
                 if (handler == null) {
                     handler = handlers.get("");
@@ -50,7 +50,7 @@ public class HttpRouter {
         for (int i = 0; i < path.length; i++) {
             cleaned_path[i] = path[i].startsWith("/") ? path[i].substring(1) : path[i];
         }
-        System.out.println("[HytaleMap] Cleaned segments: " + Arrays.toString(cleaned_path));
+        System.out.println("[VoxelAtlas] Cleaned segments: " + Arrays.toString(cleaned_path));
 
         final HttpRouter router = this.routers.get("/" + cleaned_path[0]);
 
@@ -59,7 +59,7 @@ public class HttpRouter {
 
             if (handlers != null) {
                 final String joined_path = String.join("/", cleaned_path);
-                System.out.println("[HytaleMap] No child router found, looking for handler '" + joined_path + "' in handlers: " + handlers.keySet());
+                System.out.println("[VoxelAtlas] No child router found, looking for handler '" + joined_path + "' in handlers: " + handlers.keySet());
                 final IHttpRequestHandler handler = handlers.get(joined_path);
 
                 if (handler != null) {
@@ -84,7 +84,7 @@ public class HttpRouter {
 
     public void get(String path, IHttpRequestHandler handler) {
         final Map<String, IHttpRequestHandler> handlers = this.handlers.getOrDefault(HttpMethod.GET, new HashMap<>());
-        System.out.println("[HytaleMap] Getting handler for path: " + this.path + path);
+        System.out.println("[VoxelAtlas] Getting handler for path: " + this.path + path);
         handlers.put(path, handler);
 
         this.handlers.put(HttpMethod.GET, handlers);
@@ -92,7 +92,7 @@ public class HttpRouter {
 
     public void post(String path, IHttpRequestHandler handler) {
         final Map<String, IHttpRequestHandler> handlers = this.handlers.getOrDefault(HttpMethod.POST, new HashMap<>());
-        System.out.println("[HytaleMap] Posting handler for path: " + this.path + path);
+        System.out.println("[VoxelAtlas] Posting handler for path: " + this.path + path);
         handlers.put(path, handler);
 
         this.handlers.put(HttpMethod.POST, handlers);

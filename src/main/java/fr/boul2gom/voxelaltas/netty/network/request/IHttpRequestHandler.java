@@ -1,6 +1,6 @@
-package fr.boul2gom.hymap.netty.network.request;
+package fr.boul2gom.voxelaltas.netty.network.request;
 
-import fr.boul2gom.hymap.netty.network.HttpContext;
+import fr.boul2gom.voxelaltas.netty.network.HttpContext;
 
 @FunctionalInterface
 public interface IHttpRequestHandler {

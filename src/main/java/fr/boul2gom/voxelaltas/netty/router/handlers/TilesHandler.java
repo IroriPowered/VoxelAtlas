@@ -1,10 +1,10 @@
-package fr.boul2gom.hymap.netty.router.handlers;
+package fr.boul2gom.voxelaltas.netty.router.handlers;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.dynmap.encoder.ImageEncoder.Format;
-import fr.boul2gom.hymap.netty.router.HttpRouter;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.dynmap.encoder.ImageEncoder.Format;
+import fr.boul2gom.voxelaltas.netty.router.HttpRouter;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.util.Base64;
@@ -16,7 +16,7 @@ public class TilesHandler {
 
     private static final int MAX_TILES = 200;
 
-    public TilesHandler(HytaleMap plugin) {
+    public TilesHandler(VoxelAtlas plugin) {
         final HttpRouter main = plugin.netty().main_router();
         final HttpRouter router = main.child_router("/tiles");
 

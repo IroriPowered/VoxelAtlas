@@ -1,16 +1,16 @@
-package fr.boul2gom.hymap.netty.router.handlers;
+package fr.boul2gom.voxelaltas.netty.router.handlers;
 
 import com.google.gson.JsonArray;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.dynmap.data.WorldDataProvider;
-import fr.boul2gom.hymap.netty.router.HttpRouter;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.dynmap.data.WorldDataProvider;
+import fr.boul2gom.voxelaltas.netty.router.HttpRouter;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 public class WorldsHandler {
 
-    public WorldsHandler(HytaleMap plugin) {
+    public WorldsHandler(VoxelAtlas plugin) {
         final HttpRouter main = plugin.netty().main_router();
         final HttpRouter router = main.child_router("/worlds");
 

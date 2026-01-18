@@ -1,15 +1,15 @@
-package fr.boul2gom.hymap.netty;
+package fr.boul2gom.voxelaltas.netty;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.hypixel.hytale.server.core.io.netty.NettyUtil;
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.netty.network.HttpContext;
-import fr.boul2gom.hymap.netty.network.request.HttpRequest;
-import fr.boul2gom.hymap.netty.router.HttpRouter;
-import fr.boul2gom.hymap.netty.router.handlers.FilesHandler;
-import fr.boul2gom.hymap.netty.router.handlers.TilesHandler;
-import fr.boul2gom.hymap.netty.router.handlers.WorldsHandler;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.netty.network.HttpContext;
+import fr.boul2gom.voxelaltas.netty.network.request.HttpRequest;
+import fr.boul2gom.voxelaltas.netty.router.HttpRouter;
+import fr.boul2gom.voxelaltas.netty.router.handlers.FilesHandler;
+import fr.boul2gom.voxelaltas.netty.router.handlers.TilesHandler;
+import fr.boul2gom.voxelaltas.netty.router.handlers.WorldsHandler;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
@@ -27,7 +27,7 @@ public class NettyServer {
             .serializeNulls()
             .create();
 
-    private final HytaleMap plugin;
+    private final VoxelAtlas plugin;
     private final int port;
 
     private EventLoopGroup boss;
@@ -37,7 +37,7 @@ public class NettyServer {
     private final Map<String, HttpRouter> routers;
     private HttpRouter main_router;
 
-    public NettyServer(HytaleMap plugin, int port) {
+    public NettyServer(VoxelAtlas plugin, int port) {
         this.plugin = plugin;
         this.port = port;
 
@@ -45,7 +45,7 @@ public class NettyServer {
     }
 
     public void start() {
-        System.out.println("[HytaleMap] Initializing HTTP routes...");
+        System.out.println("[VoxelAtlas] Initializing HTTP routes...");
         this.main_router = this.create_router("/");
 
         this.main_router.get("/", ((_, ctx) -> {
@@ -76,15 +76,15 @@ public class NettyServer {
             }
         }));
 
-        this.main_router.get("welcome", (_, ctx) -> ctx.text("Welcome on HytaleMap!"));
+        this.main_router.get("welcome", (_, ctx) -> ctx.text("Welcome on VoxelAtlas!"));
 
         new WorldsHandler(this.plugin);
         new TilesHandler(this.plugin);
         new FilesHandler(this.plugin);
 
-        System.out.println("[HytaleMap] Starting HTTP server...");
-        this.boss = NettyUtil.getEventLoopGroup(1, "HytaleMap - Netty -> Group: " + "boss");
-        this.worker = NettyUtil.getEventLoopGroup(4, "HytaleMap - Netty -> Group: " + "worker");
+        System.out.println("[VoxelAtlas] Starting HTTP server...");
+        this.boss = NettyUtil.getEventLoopGroup(1, "VoxelAtlas - Netty -> Group: " + "boss");
+        this.worker = NettyUtil.getEventLoopGroup(4, "VoxelAtlas - Netty -> Group: " + "worker");
 
         try {
             final ServerBootstrap bootstrap = new ServerBootstrap()
@@ -99,9 +99,9 @@ public class NettyServer {
 
             System.out.println("Listening on " + this.http_channel.localAddress().toString());
         } catch (InterruptedException e) {
-            System.err.println("[HytaleMap] Failed to bind to port!");
-            System.err.println("[HytaleMap] Make sure that no other applications are using the port given in the configuration.");
-            System.err.println("[HytaleMap] Exception: " + e.getMessage());
+            System.err.println("[VoxelAtlas] Failed to bind to port!");
+            System.err.println("[VoxelAtlas] Make sure that no other applications are using the port given in the configuration.");
+            System.err.println("[VoxelAtlas] Exception: " + e.getMessage());
 
             Thread.currentThread().interrupt();
             System.exit(-1);
@@ -113,13 +113,13 @@ public class NettyServer {
         final String uri = request.uri().substring(0, params_start == -1 ? request.uri().length() : params_start);
         final String[] path = uri.split("((?=/))");
 
-        System.out.println("[HytaleMap] Dispatching URI: " + uri);
-        System.out.println("[HytaleMap] Split path: " + Arrays.toString(path));
+        System.out.println("[VoxelAtlas] Dispatching URI: " + uri);
+        System.out.println("[VoxelAtlas] Split path: " + Arrays.toString(path));
 
         String[] cleaned_path = path;
         if (path.length > 0 && path[0].isEmpty()) {
             cleaned_path = Arrays.copyOfRange(path, 1, path.length);
-            System.out.println("[HytaleMap] Cleaned path: " + Arrays.toString(cleaned_path));
+            System.out.println("[VoxelAtlas] Cleaned path: " + Arrays.toString(cleaned_path));
         }
 
         if (cleaned_path.length == 0) {

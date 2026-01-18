@@ -1,7 +1,7 @@
-package fr.boul2gom.hymap.netty.router.handlers;
+package fr.boul2gom.voxelaltas.netty.router.handlers;
 
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.netty.router.HttpRouter;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.netty.router.HttpRouter;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.io.IOException;
@@ -23,7 +23,7 @@ public class FilesHandler {
             Map.entry("woff2", "font/woff2")
     );
 
-    public FilesHandler(HytaleMap plugin) {
+    public FilesHandler(VoxelAtlas plugin) {
         final HttpRouter main = plugin.netty().main_router();
         final HttpRouter router = main.child_router("/resources");
 

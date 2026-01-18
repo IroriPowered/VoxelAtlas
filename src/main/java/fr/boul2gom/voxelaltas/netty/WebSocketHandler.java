@@ -1,6 +1,6 @@
-package fr.boul2gom.hymap.netty;
+package fr.boul2gom.voxelaltas.netty;
 
-import fr.boul2gom.hymap.HytaleMap;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.group.ChannelGroup;
@@ -14,10 +14,10 @@ import io.netty.util.concurrent.GlobalEventExecutor;
  */
 public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
 
-    private final HytaleMap plugin;
+    private final VoxelAtlas plugin;
     private final ChannelGroup channels;
 
-    public WebSocketHandler(HytaleMap plugin) {
+    public WebSocketHandler(VoxelAtlas plugin) {
         this.plugin = plugin;
         this.channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
     }
@@ -27,8 +27,8 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
         this.channels.add(ctx.channel());
         this.plugin.tracker().add_channel(ctx.channel());
 
-        System.out.println("[HytaleMap] WebSocket client connected: " + ctx.channel().remoteAddress());
-        System.out.println("[HytaleMap] Active WebSocket connections: " + this.channels.size());
+        System.out.println("[VoxelAtlas] WebSocket client connected: " + ctx.channel().remoteAddress());
+        System.out.println("[VoxelAtlas] Active WebSocket connections: " + this.channels.size());
 
         super.channelActive(ctx);
     }
@@ -38,8 +38,8 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
         this.channels.remove(ctx.channel());
         this.plugin.tracker().remove_channel(ctx.channel());
 
-        System.out.println("[HytaleMap] WebSocket client disconnected: " + ctx.channel().remoteAddress());
-        System.out.println("[HytaleMap] Active WebSocket connections: " + this.channels.size());
+        System.out.println("[VoxelAtlas] WebSocket client disconnected: " + ctx.channel().remoteAddress());
+        System.out.println("[VoxelAtlas] Active WebSocket connections: " + this.channels.size());
 
         super.channelInactive(ctx);
     }
@@ -50,14 +50,14 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
         if (frame instanceof TextWebSocketFrame text_frame) {
             final String message = text_frame.text();
 
-            System.out.println("[HytaleMap] Received WebSocket message: " + message);
+            System.out.println("[VoxelAtlas] Received WebSocket message: " + message);
             //Handle different message types if needed
         }
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        System.err.println("[HytaleMap] WebSocket error: " + cause.getMessage());
+        System.err.println("[VoxelAtlas] WebSocket error: " + cause.getMessage());
         cause.printStackTrace();
         ctx.close();
     }

@@ -1,4 +1,4 @@
-package fr.boul2gom.hymap.dynmap.data;
+package fr.boul2gom.voxelaltas.dynmap.data;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -8,11 +8,6 @@ import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Provider for world and player data shared between HTTP and WebSocket handlers

@@ -1,4 +1,4 @@
-package fr.boul2gom.hymap.netty.network.request;
+package fr.boul2gom.voxelaltas.netty.network.request;
 
 import java.util.List;
 

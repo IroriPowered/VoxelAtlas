@@ -1,4 +1,4 @@
-package fr.boul2gom.hymap.dynmap.encoder;
+package fr.boul2gom.voxelaltas.dynmap.encoder;
 
 import com.hypixel.hytale.protocol.packets.worldmap.MapImage;
 

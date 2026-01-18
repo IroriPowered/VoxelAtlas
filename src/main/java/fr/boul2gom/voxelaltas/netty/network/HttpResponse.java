@@ -1,8 +1,8 @@
-package fr.boul2gom.hymap.netty.network;
+package fr.boul2gom.voxelaltas.netty.network;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import fr.boul2gom.hymap.netty.NettyServer;
+import fr.boul2gom.voxelaltas.netty.NettyServer;
 
 public record HttpResponse(JsonObject object) {
 

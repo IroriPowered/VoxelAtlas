@@ -1,30 +1,30 @@
-package fr.boul2gom.hymap.dynmap;
+package fr.boul2gom.voxelaltas.dynmap;
 
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.worldmap.WorldMapManager;
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.dynmap.encoder.ImageEncoder;
-import fr.boul2gom.hymap.dynmap.encoder.ImageEncoder.Format;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.dynmap.encoder.ImageEncoder;
+import fr.boul2gom.voxelaltas.dynmap.encoder.ImageEncoder.Format;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class TileManager {
 
-    private final HytaleMap plugin;
+    private final VoxelAtlas plugin;
 
     private final ConcurrentHashMap<String, CompletableFuture<byte[]>> requests;
 
-    public TileManager(HytaleMap plugin) {
+    public TileManager(VoxelAtlas plugin) {
         this.plugin = plugin;
 
         this.requests = new ConcurrentHashMap<>();
 
         // Log available formats
-        System.out.println("[HytaleMap] Image encoder initialized:");
-        System.out.println("[HytaleMap]   - PNG: Available");
-        System.out.println("[HytaleMap]   - WebP: " + (ImageEncoder.isFormatAvailable(Format.WEBP) ? "Available" : "Not available"));
+        System.out.println("[VoxelAtlas] Image encoder initialized:");
+        System.out.println("[VoxelAtlas]   - PNG: Available");
+        System.out.println("[VoxelAtlas]   - WebP: " + (ImageEncoder.isFormatAvailable(Format.WEBP) ? "Available" : "Not available"));
     }
 
     /**
@@ -93,7 +93,7 @@ public class TileManager {
 
             return ImageEncoder.encode(image, 256, format);
         }).exceptionally(ex -> {
-            System.err.println("[HytaleMap] - Failed to generate tile: " + ex.getMessage());
+            System.err.println("[VoxelAtlas] - Failed to generate tile: " + ex.getMessage());
             return ImageEncoder.empty(256, format);
         });
     }
@@ -131,7 +131,7 @@ public class TileManager {
                         }
                         Thread.sleep(50L);
                     } catch (Exception exception) {
-                        System.err.println("[HytaleMap] - Failed to pregenerate tile (" + x + ", " + z + "): " + exception.getMessage());
+                        System.err.println("[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): " + exception.getMessage());
                     }
                 }
             }

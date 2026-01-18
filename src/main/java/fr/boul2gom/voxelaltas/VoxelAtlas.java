@@ -1,21 +1,21 @@
-package fr.boul2gom.hymap;
+package fr.boul2gom.voxelaltas;
 
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
-import fr.boul2gom.hymap.dynmap.PlayerTracker;
-import fr.boul2gom.hymap.dynmap.TileManager;
-import fr.boul2gom.hymap.netty.NettyServer;
+import fr.boul2gom.voxelaltas.dynmap.PlayerTracker;
+import fr.boul2gom.voxelaltas.dynmap.TileManager;
+import fr.boul2gom.voxelaltas.netty.NettyServer;
 
 import javax.annotation.Nonnull;
 
-public class HytaleMap extends JavaPlugin {
+public class VoxelAtlas extends JavaPlugin {
 
     private TileManager tiles;
     private PlayerTracker tracker;
 
     private NettyServer netty;
 
-    public HytaleMap(@Nonnull JavaPluginInit init) {
+    public VoxelAtlas(@Nonnull JavaPluginInit init) {
         super(init);
     }
 

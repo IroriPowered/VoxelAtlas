@@ -1,9 +1,9 @@
-package fr.boul2gom.hymap.netty;
+package fr.boul2gom.voxelaltas.netty;
 
-import fr.boul2gom.hymap.HytaleMap;
-import fr.boul2gom.hymap.netty.network.HttpContext;
-import fr.boul2gom.hymap.netty.network.request.HttpRequest;
-import fr.boul2gom.hymap.netty.network.request.HttpRequestParameter;
+import fr.boul2gom.voxelaltas.VoxelAtlas;
+import fr.boul2gom.voxelaltas.netty.network.HttpContext;
+import fr.boul2gom.voxelaltas.netty.network.request.HttpRequest;
+import fr.boul2gom.voxelaltas.netty.network.request.HttpRequestParameter;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -19,9 +19,9 @@ import java.util.Map;
 
 public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
-    private final HytaleMap plugin;
+    private final VoxelAtlas plugin;
 
-    public HttpServerHandler(HytaleMap plugin) {
+    public HttpServerHandler(VoxelAtlas plugin) {
         this.plugin = plugin;
     }
 
@@ -69,9 +69,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
     public static class Initializer extends ChannelInitializer<SocketChannel> {
 
-        private final HytaleMap plugin;
+        private final VoxelAtlas plugin;
 
-        public Initializer(HytaleMap plugin) {
+        public Initializer(VoxelAtlas plugin) {
             this.plugin = plugin;
         }
 
