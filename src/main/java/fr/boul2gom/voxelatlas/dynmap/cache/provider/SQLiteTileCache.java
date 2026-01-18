@@ -41,9 +41,9 @@ public class SQLiteTileCache implements TileCache {
             this.dao = DaoManager.createDao(this.connection, CachedTile.class);
             TableUtils.createTableIfNotExists(this.connection, CachedTile.class);
 
-            System.out.println("[VoxelAtlas] SQLite cache initialized");
+            VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] SQLite cache initialized");
         } catch (SQLException | IOException e) {
-            System.err.println("[VoxelAtlas] Failed to initialize SQLite cache: " + e.getMessage());
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Failed to initialize SQLite cache: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -67,7 +67,7 @@ public class SQLiteTileCache implements TileCache {
 
                 return tile != null ? tile.data() : null;
             } catch (SQLException e) {
-                System.err.println("[VoxelAtlas] Error fetching tile from SQLite: " + e.getMessage());
+                VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Error fetching tile from SQLite: " + e.getMessage());
             }
             return null;
         });
@@ -98,7 +98,7 @@ public class SQLiteTileCache implements TileCache {
                     this.dao.create(newTile);
                 }
             } catch (SQLException e) {
-                System.err.println("[VoxelAtlas] Error saving tile to SQLite: " + e.getMessage());
+                VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Error saving tile to SQLite: " + e.getMessage());
             }
         });
     }

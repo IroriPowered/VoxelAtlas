@@ -1,5 +1,6 @@
 package fr.boul2gom.voxelatlas.netty.router;
 
+import fr.boul2gom.voxelatlas.VoxelAtlas;
 import fr.boul2gom.voxelatlas.netty.network.HttpContext;
 import fr.boul2gom.voxelatlas.netty.network.request.HttpRequest;
 import fr.boul2gom.voxelatlas.netty.network.request.IHttpRequestHandler;
@@ -79,7 +80,7 @@ public class HttpRouter {
 
     public void get(String path, IHttpRequestHandler handler) {
         final Map<String, IHttpRequestHandler> handlers = this.handlers.getOrDefault(HttpMethod.GET, new HashMap<>());
-        System.out.println("[VoxelAtlas] Getting handler for path: " + this.path + path);
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Getting handler for path: " + this.path + path);
         handlers.put(path, handler);
 
         this.handlers.put(HttpMethod.GET, handlers);
@@ -87,7 +88,7 @@ public class HttpRouter {
 
     public void post(String path, IHttpRequestHandler handler) {
         final Map<String, IHttpRequestHandler> handlers = this.handlers.getOrDefault(HttpMethod.POST, new HashMap<>());
-        System.out.println("[VoxelAtlas] Posting handler for path: " + this.path + path);
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Posting handler for path: " + this.path + path);
         handlers.put(path, handler);
 
         this.handlers.put(HttpMethod.POST, handlers);

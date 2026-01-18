@@ -1,8 +1,11 @@
 package fr.boul2gom.voxelatlas.dynmap;
 
+import com.hypixel.hytale.math.vector.Transform;
+import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
-import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
+
+import com.hypixel.hytale.server.core.universe.world.spawn.ISpawnProvider;
 import com.hypixel.hytale.server.core.universe.world.worldmap.WorldMapManager;
 import fr.boul2gom.voxelatlas.VoxelAtlas;
 import fr.boul2gom.voxelatlas.dynmap.cache.provider.MemoryTileCache;
@@ -10,7 +13,6 @@ import fr.boul2gom.voxelatlas.dynmap.cache.provider.SQLiteTileCache;
 import fr.boul2gom.voxelatlas.dynmap.cache.TileCache;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder.Format;
-import it.unimi.dsi.fastutil.longs.LongSet;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,11 +34,11 @@ public class TileManager {
         this.sqlite_cache = new SQLiteTileCache(plugin);
         this.sqlite_cache.init();
 
-        System.out.println("[VoxelAtlas] Image encoder initialized:");
-        System.out.println("[VoxelAtlas]   - PNG: Available");
-        System.out.println("[VoxelAtlas]   - WebP: "
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Image encoder initialized:");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - PNG: Available");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - WebP: "
                 + (ImageEncoder.isFormatAvailable(Format.WEBP) ? "Available" : "Not available"));
-        System.out.println("[VoxelAtlas]   - Cache: Memory (500) + SQLite");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - Cache: Memory (500) + SQLite");
     }
 
     /**
@@ -97,6 +99,12 @@ public class TileManager {
             return CompletableFuture.completedFuture(ImageEncoder.empty(256, format));
         }
 
+        // Check if the chunk is generated before attempting to render it
+        //if (!this.plugin.config().get().display_unexplored() && !this.is_chunk_generated(world, tileX, tileZ)) {
+        //    VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] - Chunk not generated because unexplored: " + tileX + ", " + tileZ);
+        //    return CompletableFuture.completedFuture(ImageEncoder.empty(256, format));
+        //}
+
         final WorldMapManager map_manager = world.getWorldMapManager();
 
         return map_manager.getImageAsync(tileX, tileZ).thenApply(image -> {
@@ -104,7 +112,7 @@ public class TileManager {
 
             return ImageEncoder.encode(image, 256, format);
         }).exceptionally(ex -> {
-            System.err.println("[VoxelAtlas] - Failed to generate tile: " + ex.getMessage());
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] - Failed to generate tile: " + ex.getMessage());
             return ImageEncoder.empty(256, format);
         });
     }
@@ -135,12 +143,24 @@ public class TileManager {
 
                         Thread.sleep(10L);
                     } catch (Exception exception) {
-                        System.err.println("[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): " + exception.getMessage());
+                        VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): "
+                                + exception.getMessage());
                     }
                 }
             }
             return count;
         });
+    }
+
+    public Vector3d world_spawn(World world) {
+        final ISpawnProvider provider = world.getWorldConfig().getSpawnProvider();
+
+        if (provider != null) {
+            final Transform global = provider.getSpawnPoint(world, world.getWorldConfig().getUuid());
+            if (global != null) return global.getPosition();
+        }
+
+        return new Vector3d(0, 0, 0);
     }
 
     /**

@@ -44,14 +44,14 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
         if (frame instanceof TextWebSocketFrame text_frame) {
             final String message = text_frame.text();
 
-            System.out.println("[VoxelAtlas] Received WebSocket message: " + message);
+            VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Received WebSocket message: " + message);
             //Handle different message types if needed
         }
     }
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        System.err.println("[VoxelAtlas] WebSocket error: " + cause.getMessage());
+        VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] WebSocket error: " + cause.getMessage());
         cause.printStackTrace();
         ctx.close();
     }

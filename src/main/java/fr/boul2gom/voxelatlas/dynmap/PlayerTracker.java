@@ -34,7 +34,7 @@ public class PlayerTracker {
         this.pool = Executors.newScheduledThreadPool(2, factory);
         this.pool.scheduleAtFixedRate(this::broadcast_positions, 5, 5, TimeUnit.SECONDS);
 
-        System.out.println("[VoxelAtlas] Player tracker started - Broadcasting every 5 seconds");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Player tracker started - Broadcasting every 5 seconds");
     }
 
     public void shutdown() {
@@ -51,7 +51,7 @@ public class PlayerTracker {
         }
 
         this.channels.close().awaitUninterruptibly();
-        System.out.println("[VoxelAtlas] Player tracker shutdown complete");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Player tracker shutdown complete");
     }
 
     public void add_channel(Channel channel) {

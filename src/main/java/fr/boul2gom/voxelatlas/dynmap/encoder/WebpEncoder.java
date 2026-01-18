@@ -1,6 +1,7 @@
 package fr.boul2gom.voxelatlas.dynmap.encoder;
 
 import com.hypixel.hytale.protocol.packets.worldmap.MapImage;
+import fr.boul2gom.voxelatlas.VoxelAtlas;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -46,7 +47,7 @@ public class WebpEncoder {
     public static byte[] encode(MapImage image, int outputSize, float quality) {
         if (!WEBP_AVAILABLE) {
             // Fallback to PNG if WebP is not available
-            System.err.println("[VoxelAtlas] WebP not available, falling back to PNG");
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] WebP not available, falling back to PNG");
             return PngEncoder.encode(image, outputSize);
         }
 
@@ -120,7 +121,7 @@ public class WebpEncoder {
             // Get WebP writer
             Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("webp");
             if (!writers.hasNext()) {
-                System.err.println("[VoxelAtlas] No WebP writer found");
+                VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] No WebP writer found");
                 return new byte[0];
             }
 
@@ -142,7 +143,7 @@ public class WebpEncoder {
 
             return out.toByteArray();
         } catch (IOException e) {
-            System.err.println("[VoxelAtlas] Failed to encode WebP: " + e.getMessage());
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Failed to encode WebP: " + e.getMessage());
             return new byte[0];
         }
     }

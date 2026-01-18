@@ -45,7 +45,7 @@ public class NettyServer {
     }
 
     public void start() {
-        System.out.println("[VoxelAtlas] Initializing HTTP routes...");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Initializing HTTP routes...");
         this.main_router = this.create_router("/");
 
         this.main_router.get("/", ((_, ctx) -> {
@@ -82,7 +82,7 @@ public class NettyServer {
         new TilesHandler(this.plugin);
         new FilesHandler(this.plugin);
 
-        System.out.println("[VoxelAtlas] Starting HTTP server...");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Starting HTTP server...");
         this.boss = NettyUtil.getEventLoopGroup(1, "VoxelAtlas - Netty -> Group: " + "boss");
         this.worker = NettyUtil.getEventLoopGroup(4, "VoxelAtlas - Netty -> Group: " + "worker");
 
@@ -97,11 +97,11 @@ public class NettyServer {
 
             this.http_channel = bootstrap.bind("0.0.0.0", this.port).sync().channel();
 
-            System.out.println("Listening on " + this.http_channel.localAddress().toString());
+            VoxelAtlas.LOGGER.atInfo().log("Listening on " + this.http_channel.localAddress().toString());
         } catch (InterruptedException e) {
-            System.err.println("[VoxelAtlas] Failed to bind to port!");
-            System.err.println("[VoxelAtlas] Make sure that no other applications are using the port given in the configuration.");
-            System.err.println("[VoxelAtlas] Exception: " + e.getMessage());
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Failed to bind to port!");
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Make sure that no other applications are using the port given in the configuration.");
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Exception: " + e.getMessage());
 
             Thread.currentThread().interrupt();
             System.exit(-1);
