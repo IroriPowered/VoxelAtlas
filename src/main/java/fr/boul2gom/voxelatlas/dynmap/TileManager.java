@@ -14,6 +14,14 @@ import fr.boul2gom.voxelatlas.dynmap.cache.TileCache;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder.Format;
 
+import com.hypixel.hytale.math.util.ChunkUtil;
+import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
+import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider;
+import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider.IndexedStorageCache;
+import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider.IndexedStorageChunkLoader;
+import com.hypixel.hytale.storage.IndexedStorageFile;
+import com.hypixel.hytale.component.Store;
+
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -100,15 +108,15 @@ public class TileManager {
         }
 
         // Check if the chunk is generated before attempting to render it
-        //if (!this.plugin.config().get().display_unexplored() && !this.is_chunk_generated(world, tileX, tileZ)) {
-        //    VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] - Chunk not generated because unexplored: " + tileX + ", " + tileZ);
-        //    return CompletableFuture.completedFuture(ImageEncoder.empty(256, format));
-        //}
+        if (!this.plugin.config().get().display_unexplored() && this.is_unexplored(world, tileX, tileZ)) {
+            return CompletableFuture.completedFuture(ImageEncoder.empty(256, format));
+        }
 
         final WorldMapManager map_manager = world.getWorldMapManager();
 
         return map_manager.getImageAsync(tileX, tileZ).thenApply(image -> {
-            if (image == null) return ImageEncoder.empty(256, format);
+            if (image == null)
+                return ImageEncoder.empty(256, format);
 
             return ImageEncoder.encode(image, 256, format);
         }).exceptionally(ex -> {
@@ -127,9 +135,11 @@ public class TileManager {
      * @param format    Image format (PNG or WebP)
      * @return CompletableFuture with number of generated tiles
      */
-    public CompletableFuture<Integer> pregenerate(String worldName, int centerX, int centerZ, int radius, Format format) {
+    public CompletableFuture<Integer> pregenerate(String worldName, int centerX, int centerZ, int radius,
+            Format format) {
         final World world = Universe.get().getWorld(worldName);
-        if (world == null) return CompletableFuture.completedFuture(0);
+        if (world == null)
+            return CompletableFuture.completedFuture(0);
 
         return CompletableFuture.supplyAsync(() -> {
             int count = 0;
@@ -143,8 +153,9 @@ public class TileManager {
 
                         Thread.sleep(10L);
                     } catch (Exception exception) {
-                        VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): "
-                                + exception.getMessage());
+                        VoxelAtlas.LOGGER.atSevere()
+                                .log("[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): "
+                                        + exception.getMessage());
                     }
                 }
             }
@@ -157,7 +168,8 @@ public class TileManager {
 
         if (provider != null) {
             final Transform global = provider.getSpawnPoint(world, world.getWorldConfig().getUuid());
-            if (global != null) return global.getPosition();
+            if (global != null)
+                return global.getPosition();
         }
 
         return new Vector3d(0, 0, 0);
@@ -175,6 +187,62 @@ public class TileManager {
      */
     public String create_key(String world, int zoom, int x, int z, Format format) {
         return world + "/" + zoom + "/" + x + "/" + z + "/" + format.name().toLowerCase();
+    }
+
+    /**
+     * Check if a chunk is unexplored (not generated)
+     *
+     * @param world  World
+     * @param chunkX Chunk X coordinate
+     * @param chunkZ Chunk Z coordinate
+     * @return true if the chunk is unexplored (not generated)
+     */
+    public boolean is_unexplored(World world, int chunkX, int chunkZ) {
+        if (world == null)
+            return true;
+
+        final ChunkStore chunk_store = world.getChunkStore();
+
+        // 1. Check loaded chunks (in memory)
+        if (chunk_store.getChunkReference(ChunkUtil.indexChunk(chunkX, chunkZ)) != null) {
+            return false;
+        }
+
+        // 2. Check storage (on disk)
+        try {
+            final Store<ChunkStore> store = chunk_store.getStore();
+
+            // This relies on the world using IndexedStorage
+            if (chunk_store.getLoader() instanceof IndexedStorageChunkLoader) {
+                final var cache = store.getResource(IndexedStorageCache.getResourceType());
+
+                int regionX = chunkX >> 5;
+                int regionZ = chunkZ >> 5;
+
+                // Checks if the region file exists
+                final IndexedStorageFile region_file = cache.getOrTryOpen(regionX, regionZ);
+                if (region_file != null) {
+                    int localX = chunkX & 0x1F;
+                    int localZ = chunkZ & 0x1F;
+                    int index = ChunkUtil.indexColumn(localX, localZ);
+
+                    // Check if the chunk index exists in the region file keys
+                    if (region_file.keys().contains(index)) {
+                        return false;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Error checking chunk generation: " + e.getMessage());
+        }
+
+        return true;
+    }
+
+    public void purge_expired(long max_age_ms) {
+        if (this.sqlite_cache != null) {
+            this.sqlite_cache.purge_expired(max_age_ms);
+        }
     }
 
     public void close() {

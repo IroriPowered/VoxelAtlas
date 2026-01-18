@@ -3,6 +3,7 @@ package fr.boul2gom.voxelatlas.dynmap.cache.provider;
 import com.j256.ormlite.dao.Dao;
 import com.j256.ormlite.dao.DaoManager;
 import com.j256.ormlite.jdbc.JdbcConnectionSource;
+import com.j256.ormlite.stmt.DeleteBuilder;
 import com.j256.ormlite.support.ConnectionSource;
 import com.j256.ormlite.table.TableUtils;
 import fr.boul2gom.voxelatlas.VoxelAtlas;
@@ -132,6 +133,23 @@ public class SQLiteTileCache implements TileCache {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+    }
+
+    @Override
+    public void purge_expired(long max_age_ms) {
+        try {
+            final long threshold = System.currentTimeMillis() - max_age_ms;
+            final DeleteBuilder<CachedTile, Long> builder = this.dao.deleteBuilder();
+            builder.where().lt("timestamp", threshold);
+            
+            final int count = builder.delete();
+
+            if (count > 0) {
+                VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Purged " + count + " expired tiles from database");
+            }
+        } catch (SQLException e) {
+            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Failed to purge expired tiles: " + e.getMessage());
         }
     }
 

@@ -57,6 +57,11 @@ public class MemoryTileCache implements TileCache {
     }
 
     @Override
+    public void purge_expired(long maxAgeMillis) {
+        // Memory cache doesn't support expiration by age, it uses LRU
+    }
+
+    @Override
     public CacheType type() {
         return CacheType.MEMORY;
     }

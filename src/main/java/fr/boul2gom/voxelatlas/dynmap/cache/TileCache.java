@@ -53,6 +53,13 @@ public interface TileCache {
     void close();
 
     /**
+     * Purge expired tiles from the cache
+     *
+     * @param maxAgeMillis Maximum age of tiles in milliseconds
+     */
+    void purge_expired(long maxAgeMillis);
+
+    /**
      * Get the cache type
      * 
      * @return CacheType

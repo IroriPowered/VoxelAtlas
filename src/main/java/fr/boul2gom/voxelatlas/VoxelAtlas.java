@@ -15,6 +15,7 @@ import fr.boul2gom.voxelatlas.netty.NettyServer;
 import fr.boul2gom.voxelatlas.utils.Configuration;
 
 import javax.annotation.Nonnull;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -52,11 +53,31 @@ public class VoxelAtlas extends JavaPlugin {
         this.netty.start();
         this.tracker.start();
 
+        // Purge expired tiles
+        final int expiration = this.config.get().cache_expiration_hours();
+        if (expiration > 0) {
+            final long max_age_ms = expiration * 3600 * 1000L;
+            this.tiles.purge_expired(max_age_ms);
+        }
+
+        // Pregeneration (only on first start)
         if (!this.config.get().pregenerate()) return;
+
+        final Path pregen_lock = this.data_directory().resolve("pregen_done");
+        if (Files.exists(pregen_lock)) {
+            return;
+        }
+
         final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
         scheduler.schedule(() -> {
-            VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Pregenerating tiles...");
+            try {
+                Files.createFile(pregen_lock);
+            } catch (Exception e) {
+                VoxelAtlas.LOGGER.atWarning().log("[VoxelAtlas] Failed to create pregen lock file: " + e.getMessage());
+            }
+
+            VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] First start detected: Pregenerating tiles...");
             final long start = System.currentTimeMillis();
             final int radius = this.config.get().pregen_radius();
 
@@ -67,7 +88,8 @@ public class VoxelAtlas extends JavaPlugin {
 
                 this.tiles.pregenerate(world.getName(), chunkX, chunkZ, radius, ImageEncoder.Format.PNG).thenRun(() -> {
                     final long duration = System.currentTimeMillis() - start;
-                    VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Pregeneration complete for world " + world.getName() + " in " + duration + " ms");
+                    VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Pregeneration complete for world " + world.getName()
+                            + " in " + duration + " ms");
                 });
             }
         }, 5, TimeUnit.SECONDS);
