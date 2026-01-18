@@ -1,4 +1,6 @@
 docs/
+bin/
+run/
 
 # Gradle
 .gradle/
