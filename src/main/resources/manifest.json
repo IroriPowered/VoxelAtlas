@@ -1,0 +1,24 @@
+{
+    "Group": "fr.boul2gom",
+    "Name": "HytaleMap",
+    "Version": "1.0.0",
+    "Description": "\uD83D\uDDFA\uFE0F A dynamic map plugin for Hytale servers",
+    "Authors": [
+        {
+            "Name": "boul2gom",
+            "Email": "contact@boul2gom.com",
+            "Url": "https://github.com/boul2gom"
+        }
+    ],
+    "Website": "https://github.com/boul2gom/HytaleMap",
+    "ServerVersion": "*",
+    "Dependencies": {
+        
+    },
+    "OptionalDependencies": {
+        
+    },
+    "DisabledByDefault": false,
+    "Main": "fr.boul2gom.hymap.HytaleMap",
+    "IncludesAssetPack": false
+}
