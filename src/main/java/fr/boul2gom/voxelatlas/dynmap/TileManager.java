@@ -163,18 +163,6 @@ public class TileManager {
         });
     }
 
-    public Vector3d world_spawn(World world) {
-        final ISpawnProvider provider = world.getWorldConfig().getSpawnProvider();
-
-        if (provider != null) {
-            final Transform global = provider.getSpawnPoint(world, world.getWorldConfig().getUuid());
-            if (global != null)
-                return global.getPosition();
-        }
-
-        return new Vector3d(0, 0, 0);
-    }
-
     /**
      * Create a cache key for a tile with specified format
      * 

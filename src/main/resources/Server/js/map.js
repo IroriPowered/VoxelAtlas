@@ -174,6 +174,7 @@ const SCALE = TILE_SIZE / CHUNK_SIZE;  // 8 - Leaflet units per block
 let map = null;
 let tile_layer = null;
 let current_world = 'world';
+let worlds_info = {}; // Store world metadata (spawn, etc.)
 let websocket = null;
 let player_markers = {};
 let player_data = {};
@@ -212,7 +213,7 @@ function init_map() {
         maxBoundsViscosity: 1.0
     });
 
-    // Start at origin
+    // Start at origin (will be updated when worlds load)
     map.setView([0, 0], 0);
 
     update_tile_layer();
@@ -265,6 +266,16 @@ function world_to_latlng(x, z) {
     return L.latLng(-z * SCALE, x * SCALE);
 }
 
+function center_on_spawn() {
+    const info = worlds_info[current_world];
+    if (info && info.spawn) {
+        const pos = world_to_latlng(info.spawn.x, info.spawn.z);
+        map.setView(pos, 0);
+    } else {
+        map.setView([0, 0], 0);
+    }
+}
+
 async function load_worlds() {
     try {
         const response = await fetch('/worlds');
@@ -272,21 +283,35 @@ async function load_worlds() {
 
         const data = await response.json();
         const worlds = data.worlds;
+        
+        // Update info map
+        worlds.forEach(w => {
+            worlds_info[w.name] = {
+                spawn: { x: w.spawn_x || 0, z: w.spawn_z || 0 }
+            };
+        });
 
         const select = document.getElementById('world-select');
+        // Only rebuild options if empty or force refresh needed?
+        // Actually simplest is to rebuild but keep selection.
+        const previous_selection = select.value || current_world;
         select.innerHTML = '';
 
         worlds.forEach(world => {
             const option = document.createElement('option');
             option.value = world.name;
             option.textContent = world.name;
-            if (world.name === current_world) option.selected = true;
+            if (world.name === previous_selection) option.selected = true;
             select.appendChild(option);
         });
 
-        if (worlds.length > 0 && !worlds.find(w => w.name === current_world)) {
-            current_world = worlds[0].name;
-            update_tile_layer();
+        if (worlds.length > 0) {
+            // If current world is not in list (or first load), select first
+            if (!worlds.find(w => w.name === current_world)) {
+                current_world = worlds[0].name;
+                update_tile_layer();
+                center_on_spawn(); // Center on first load/switch
+            }
         }
     } catch (e) {
         console.error('Failed to load worlds:', e);
@@ -298,6 +323,7 @@ function on_world_change(e) {
     update_tile_layer();
     clear_player_markers();
     update_player_list();
+    center_on_spawn();
 }
 
 // -- Player Markers --

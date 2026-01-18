@@ -12,10 +12,13 @@ import com.hypixel.hytale.server.core.universe.world.World;
 /**
  * Provider for world and player data shared between HTTP and WebSocket handlers
  */
+import com.hypixel.hytale.server.core.universe.world.spawn.ISpawnProvider;
+
 public class WorldDataProvider {
 
     /**
      * Get all available worlds with their player counts
+     * 
      * @return JsonArray of world data
      */
     public static JsonArray available_worlds() {
@@ -26,14 +29,32 @@ public class WorldDataProvider {
             world_data.addProperty("name", world.getName());
             world_data.addProperty("players", world.getPlayerCount());
 
+            final Vector3d spawn = get_spawn(world);
+
+            world_data.addProperty("spawn_x", spawn.x);
+            world_data.addProperty("spawn_z", spawn.z);
+
             worlds.add(world_data);
         }
 
         return worlds;
     }
 
+    public static Vector3d get_spawn(World world) {
+        final ISpawnProvider provider = world.getWorldConfig().getSpawnProvider();
+
+        if (provider != null) {
+            final Transform global = provider.getSpawnPoint(world, world.getWorldConfig().getUuid());
+            if (global != null)
+                return global.getPosition();
+        }
+
+        return new Vector3d(0, 0, 0);
+    }
+
     /**
      * Get all players in a specific world
+     * 
      * @param world The world to get players from
      * @return JsonArray of player data
      */
@@ -50,6 +71,7 @@ public class WorldDataProvider {
 
     /**
      * Convert a PlayerRef to a JsonObject
+     * 
      * @param player The player reference
      * @return JsonObject with player data
      */

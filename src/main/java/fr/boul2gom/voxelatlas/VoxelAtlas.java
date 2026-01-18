@@ -10,6 +10,7 @@ import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.util.Config;
 import fr.boul2gom.voxelatlas.dynmap.PlayerTracker;
 import fr.boul2gom.voxelatlas.dynmap.TileManager;
+import fr.boul2gom.voxelatlas.dynmap.data.WorldDataProvider;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder;
 import fr.boul2gom.voxelatlas.netty.NettyServer;
 import fr.boul2gom.voxelatlas.utils.Configuration;
@@ -82,7 +83,7 @@ public class VoxelAtlas extends JavaPlugin {
             final int radius = this.config.get().pregen_radius();
 
             for (final World world : Universe.get().getWorlds().values()) {
-                final Vector3d world_spawn = this.tiles().world_spawn(world);
+                final Vector3d world_spawn = WorldDataProvider.get_spawn(world);
                 final int chunkX = ChunkUtil.chunkCoordinate((int) world_spawn.x);
                 final int chunkZ = ChunkUtil.chunkCoordinate((int) world_spawn.z);
 
