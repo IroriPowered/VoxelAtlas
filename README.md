@@ -4,7 +4,11 @@
 This plugin brings real-time dynamic mapping to Hytale servers, similar to Dynmap for Minecraft. It provides a web-based interface that allows players to view their server's world in real-time through their browser, with support for player tracking, markers, and more.
 </div>
 
+<br>
+
 ![Screenshot](https://raw.githubusercontent.com/boul2gom/VoxelAtlas/develop/VoxelAtlas.png)
+
+<br>
 
 <div align="center">
 ⚠️ The project is still in development, so if you encounter any bugs or have any feature requests, please open an issue or a discussion.
