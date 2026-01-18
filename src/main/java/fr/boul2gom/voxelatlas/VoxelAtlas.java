@@ -32,6 +32,9 @@ public class VoxelAtlas extends JavaPlugin {
 
     @Override
     public void setup() {
+        this.config.load();
+        this.config.save();
+
         this.tiles = new TileManager(this);
         this.tracker = new PlayerTracker(this);
 

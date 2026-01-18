@@ -344,9 +344,7 @@ function connect_websocket() {
     status_el.textContent = 'Connecting...';
     status_el.className = 'connecting';
 
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // Use /ws/players as defined in HttpServerHandler.java
-    websocket = new WebSocket(`${protocol}//${location.host}/ws/players`);
+    websocket = new WebSocket(`ws://${location.host}/ws/players`);
 
     websocket.onopen = () => {
         status_el.textContent = 'Connected';
@@ -361,8 +359,15 @@ function connect_websocket() {
     websocket.onmessage = (e) => {
         try {
             const data = JSON.parse(e.data);
-            if (data.type === 'players') {
-                update_players(data.worlds);
+
+            if (data.type === 'player_positions') {
+                const worlds_map = {};
+                if (Array.isArray(data.data)) {
+                    data.data.forEach(item => {
+                        worlds_map[item.world] = item.players;
+                    });
+                }
+                update_players(worlds_map);
             }
         } catch (err) {
             console.error("Error parsing WebSocket message:", err);
