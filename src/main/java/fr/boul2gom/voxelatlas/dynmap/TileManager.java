@@ -1,11 +1,8 @@
 package fr.boul2gom.voxelatlas.dynmap;
 
-import com.hypixel.hytale.math.vector.Transform;
-import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 
-import com.hypixel.hytale.server.core.universe.world.spawn.ISpawnProvider;
 import com.hypixel.hytale.server.core.universe.world.worldmap.WorldMapManager;
 import fr.boul2gom.voxelatlas.VoxelAtlas;
 import fr.boul2gom.voxelatlas.dynmap.cache.provider.MemoryTileCache;
@@ -16,7 +13,6 @@ import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder.Format;
 
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
-import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider;
 import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider.IndexedStorageCache;
 import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider.IndexedStorageChunkLoader;
 import com.hypixel.hytale.storage.IndexedStorageFile;
@@ -24,10 +20,16 @@ import com.hypixel.hytale.component.Store;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import com.hypixel.hytale.math.vector.Vector3d;
+import fr.boul2gom.voxelatlas.dynmap.data.WorldDataProvider;
 
 public class TileManager {
 
     private final VoxelAtlas plugin;
+    private final ExecutorService generation_executor;
 
     private final ConcurrentHashMap<String, CompletableFuture<byte[]>> requests;
     private final TileCache memory_cache;
@@ -35,6 +37,7 @@ public class TileManager {
 
     public TileManager(VoxelAtlas plugin) {
         this.plugin = plugin;
+        this.generation_executor = Executors.newFixedThreadPool(4); // Limit to 4 concurrent generations
 
         this.requests = new ConcurrentHashMap<>();
 
@@ -61,11 +64,11 @@ public class TileManager {
      */
     public CompletableFuture<byte[]> fetch_tile(String world, int zoom, int tileX, int tileZ, Format format) {
         return this.memory_cache.get(world, zoom, tileX, tileZ, format).thenCompose(data -> {
-            if (data != null) {
+            if (data != null && data.length > 500) {
                 return CompletableFuture.completedFuture(data);
             }
             return this.sqlite_cache.get(world, zoom, tileX, tileZ, format).thenCompose(sqliteData -> {
-                if (sqliteData != null) {
+                if (sqliteData != null && sqliteData.length > 500) {
                     this.memory_cache.put(world, zoom, tileX, tileZ, format, sqliteData);
                     return CompletableFuture.completedFuture(sqliteData);
                 }
@@ -84,6 +87,9 @@ public class TileManager {
                     if (res != null && ex == null) {
                         this.memory_cache.put(world, zoom, tileX, tileZ, format, res);
                         this.sqlite_cache.put(world, zoom, tileX, tileZ, format, res);
+
+                        // Notify clients of update
+                        this.broadcast_tile_update(world, tileX, tileZ, zoom);
                     }
                 });
                 return future;
@@ -104,24 +110,41 @@ public class TileManager {
     private CompletableFuture<byte[]> generate_tile(String world_name, int zoom, int tileX, int tileZ, Format format) {
         final World world = Universe.get().getWorld(world_name);
         if (world == null) {
-            return CompletableFuture.completedFuture(ImageEncoder.empty(256, format));
+            return CompletableFuture.completedFuture(null);
         }
 
         // Check if the chunk is generated before attempting to render it
-        if (!this.plugin.config().get().display_unexplored() && this.is_unexplored(world, tileX, tileZ)) {
-            return CompletableFuture.completedFuture(ImageEncoder.empty(256, format));
+        final boolean display_unexplored = this.plugin.config().get().display_unexplored();
+        boolean force_render = false;
+
+        if (!display_unexplored) {
+            final Vector3d spawn = WorldDataProvider.get_spawn(world);
+            final int spawnChunkX = ((int) spawn.x) >> 5;
+            final int spawnChunkZ = ((int) spawn.z) >> 5;
+            final int spawnRadius = this.plugin.config().get().spawn_radius();
+
+            // Check if tile is within spawn radius (using simple box check for speed)
+            if (Math.abs(tileX - spawnChunkX) <= spawnRadius && Math.abs(tileZ - spawnChunkZ) <= spawnRadius) {
+                force_render = true;
+            }
+        }
+
+        if (!display_unexplored && !force_render && this.is_unexplored(world, tileX, tileZ)) {
+            return CompletableFuture.completedFuture(null);
         }
 
         final WorldMapManager map_manager = world.getWorldMapManager();
 
-        return map_manager.getImageAsync(tileX, tileZ).thenApply(image -> {
+        return CompletableFuture.supplyAsync(() -> {
+            return map_manager.getImageAsync(tileX, tileZ).join();
+        }, this.generation_executor).thenApply(image -> {
             if (image == null)
-                return ImageEncoder.empty(256, format);
+                return null;
 
             return ImageEncoder.encode(image, 256, format);
         }).exceptionally(ex -> {
             VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] - Failed to generate tile: " + ex.getMessage());
-            return ImageEncoder.empty(256, format);
+            return null;
         });
     }
 
@@ -191,12 +214,7 @@ public class TileManager {
 
         final ChunkStore chunk_store = world.getChunkStore();
 
-        // 1. Check loaded chunks (in memory)
-        if (chunk_store.getChunkReference(ChunkUtil.indexChunk(chunkX, chunkZ)) != null) {
-            return false;
-        }
-
-        // 2. Check storage (on disk)
+        // Check storage (on disk)
         try {
             final Store<ChunkStore> store = chunk_store.getStore();
 
@@ -240,5 +258,63 @@ public class TileManager {
         if (this.memory_cache != null) {
             this.memory_cache.close();
         }
+        if (this.generation_executor != null) {
+            this.generation_executor.shutdown();
+        }
+    }
+
+    /**
+     * Update tiles around a center point using a spiral pattern
+     * 
+     * @param worldName World name
+     * @param centerX   Center X coordinate
+     * @param centerZ   Center Z coordinate
+     * @param radius    Radius in tiles
+     */
+    public void update_tiles_around(String worldName, int centerX, int centerZ, int radius) {
+        final World world = Universe.get().getWorld(worldName);
+        if (world == null)
+            return;
+
+        // Simple spiral iterator implementation
+        int x = 0;
+        int z = 0;
+        int dx = 0;
+        int dz = -1;
+
+        // Max steps for a square of side 2*radius + 1
+        int max_steps = (2 * radius + 1) * (2 * radius + 1);
+
+        for (int i = 0; i < max_steps; i++) {
+            if ((-radius <= x) && (x <= radius) && (-radius <= z) && (z <= radius)) {
+                final int tileX = centerX + x;
+                final int tileZ = centerZ + z;
+
+                this.fetch_tile(worldName, 0, tileX, tileZ, Format.PNG);
+            }
+
+            if ((x == z) || ((x < 0) && (x == -z)) || ((x > 0) && (x == 1 - z))) {
+                int t = dx;
+                dx = -dz;
+                dz = t;
+            }
+            x += dx;
+            z += dz;
+        }
+    }
+
+    public void broadcast_tile_update(String worldName, int tileX, int tileZ, int zoom) {
+        if (this.plugin.websocket() == null || this.plugin.websocket().connections_count() == 0) {
+            return;
+        }
+
+        final com.google.gson.JsonObject message = new com.google.gson.JsonObject();
+        message.addProperty("type", "tile_update");
+        message.addProperty("world", worldName);
+        message.addProperty("x", tileX);
+        message.addProperty("z", tileZ);
+        message.addProperty("zoom", zoom);
+
+        this.plugin.websocket().broadcast(message);
     }
 }

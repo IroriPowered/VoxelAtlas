@@ -33,6 +33,9 @@ L.TileLayer.Batch = L.TileLayer.extend({
         const tile = document.createElement('img');
         tile.alt = '';
         tile.setAttribute('role', 'presentation');
+        tile.dataset.x = coords.x;
+        tile.dataset.z = coords.y;
+        tile.dataset.zoom = coords.z;
 
         const key = `0/${coords.x}/${coords.y}`;
         this._queue_tile_request(key, coords, tile, done);
@@ -70,8 +73,8 @@ L.TileLayer.Batch = L.TileLayer.extend({
         this._pending_tiles.clear();
         this._batch_timer = null;
 
-        // Split into chunks of 200 tiles max
-        const CHUNK_SIZE = 200;
+        // Split into chunks of 20 tiles max to avoid timeouts
+        const CHUNK_SIZE = 20;
         const chunks = [];
         let current_chunk = new Map();
 
@@ -283,7 +286,7 @@ async function load_worlds() {
 
         const data = await response.json();
         const worlds = data.worlds;
-        
+
         // Update info map
         worlds.forEach(w => {
             worlds_info[w.name] = {
@@ -394,6 +397,18 @@ function connect_websocket() {
                     });
                 }
                 update_players(worlds_map);
+            } else if (data.type === 'tile_update') {
+                if (current_world !== data.world) return;
+
+                // Find tile in DOM
+                const selector = `img[data-x="${data.x}"][data-z="${data.z}"][data-zoom="${data.zoom}"]`;
+                const tile = document.querySelector(selector);
+
+                if (tile) {
+                    console.log(`Updating tile ${data.x}, ${data.z}`);
+                    // Force refresh
+                    tile.src = `/tiles?world=${data.world}&zoom=${data.zoom}&x=${data.x}&z=${data.z}&t=${Date.now()}`;
+                }
             }
         } catch (err) {
             console.error("Error parsing WebSocket message:", err);

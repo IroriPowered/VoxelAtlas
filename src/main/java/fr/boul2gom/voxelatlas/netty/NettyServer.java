@@ -91,6 +91,7 @@ public class NettyServer {
                     .group(this.boss, this.worker)
                     .channel(NettyUtil.getServerChannel())
                     .option(ChannelOption.SO_BACKLOG, 1024)
+                    .option(ChannelOption.SO_REUSEADDR, true)
                     .childOption(ChannelOption.TCP_NODELAY, true)
                     .childOption(ChannelOption.SO_KEEPALIVE, true)
                     .childHandler(new HttpServerHandler.Initializer(this.plugin));

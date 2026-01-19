@@ -8,11 +8,14 @@ import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.util.Config;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
+import java.util.UUID;
 import fr.boul2gom.voxelatlas.dynmap.PlayerTracker;
 import fr.boul2gom.voxelatlas.dynmap.TileManager;
 import fr.boul2gom.voxelatlas.dynmap.data.WorldDataProvider;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder;
 import fr.boul2gom.voxelatlas.netty.NettyServer;
+import fr.boul2gom.voxelatlas.netty.WebSocketManager;
 import fr.boul2gom.voxelatlas.utils.Configuration;
 
 import javax.annotation.Nonnull;
@@ -31,6 +34,7 @@ public class VoxelAtlas extends JavaPlugin {
     private PlayerTracker tracker;
 
     private NettyServer netty;
+    private WebSocketManager websocket;
 
     public VoxelAtlas(@Nonnull JavaPluginInit init) {
         super(init);
@@ -40,10 +44,12 @@ public class VoxelAtlas extends JavaPlugin {
 
     @Override
     public void setup() {
+        LOGGER.atInfo().log("[VoxelAtlas] Initializing...");
         this.config.load();
         this.config.save();
 
         this.tiles = new TileManager(this);
+        this.websocket = new WebSocketManager(this);
         this.tracker = new PlayerTracker(this);
 
         this.netty = new NettyServer(this, this.config.get().webserver_port());
@@ -51,6 +57,7 @@ public class VoxelAtlas extends JavaPlugin {
 
     @Override
     public void start() {
+        LOGGER.atInfo().log("[VoxelAtlas] Starting...");
         this.netty.start();
         this.tracker.start();
 
@@ -61,6 +68,31 @@ public class VoxelAtlas extends JavaPlugin {
             this.tiles.purge_expired(max_age_ms);
         }
 
+        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+
+        // Schedule View Radius updates
+        final int view_radius = this.config.get().view_radius();
+        final int view_period = this.config.get().view_update_period();
+        if (view_radius > 0 && view_period > 0) {
+            scheduler.scheduleAtFixedRate(() -> {
+                for (final PlayerRef player : Universe.get().getPlayers()) {
+                    final UUID worldUuid = player.getWorldUuid();
+                    if (worldUuid == null)
+                        continue;
+
+                    final World world = Universe.get().getWorld(worldUuid);
+                    if (world == null)
+                        continue;
+
+                    final Vector3d pos = player.getTransform().getPosition();
+                    final int chunkX = ChunkUtil.chunkCoordinate((int) pos.x);
+                    final int chunkZ = ChunkUtil.chunkCoordinate((int) pos.z);
+
+                    this.tiles.update_tiles_around(world.getName(), chunkX, chunkZ, view_radius);
+                }
+            }, view_period, view_period, TimeUnit.SECONDS);
+        }
+
         // Pregeneration (only on first start)
         if (!this.config.get().pregenerate()) return;
 
@@ -68,8 +100,6 @@ public class VoxelAtlas extends JavaPlugin {
         if (Files.exists(pregen_lock)) {
             return;
         }
-
-        final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
         scheduler.schedule(() -> {
             try {
@@ -107,6 +137,9 @@ public class VoxelAtlas extends JavaPlugin {
         if (this.netty != null) {
             this.netty.shutdown();
         }
+        if (this.websocket != null) {
+            this.websocket.shutdown();
+        }
     }
 
     public Config<Configuration> config() {
@@ -127,5 +160,9 @@ public class VoxelAtlas extends JavaPlugin {
 
     public Path data_directory() {
         return this.getDataDirectory();
+    }
+
+    public WebSocketManager websocket() {
+        return this.websocket;
     }
 }

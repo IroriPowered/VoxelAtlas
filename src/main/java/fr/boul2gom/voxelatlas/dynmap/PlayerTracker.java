@@ -6,22 +6,16 @@ import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import fr.boul2gom.voxelatlas.VoxelAtlas;
 import fr.boul2gom.voxelatlas.dynmap.data.WorldDataProvider;
-import fr.boul2gom.voxelatlas.netty.NettyServer;
-import io.netty.channel.Channel;
-import io.netty.channel.group.ChannelGroup;
-import io.netty.channel.group.DefaultChannelGroup;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import io.netty.util.concurrent.GlobalEventExecutor;
 
 import java.util.concurrent.*;
 
 public class PlayerTracker {
 
-    private final ChannelGroup channels;
+    private final VoxelAtlas plugin;
     private ScheduledExecutorService pool;
 
     public PlayerTracker(VoxelAtlas plugin) {
-        this.channels = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
+        this.plugin = plugin;
     }
 
     public void start() {
@@ -49,25 +43,11 @@ public class PlayerTracker {
                 Thread.currentThread().interrupt();
             }
         }
-
-        this.channels.close().awaitUninterruptibly();
         VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Player tracker shutdown complete");
     }
 
-    public void add_channel(Channel channel) {
-        this.channels.add(channel);
-    }
-
-    public void remove_channel(Channel channel) {
-        this.channels.remove(channel);
-    }
-
-    public int connections_count() {
-        return this.channels.size();
-    }
-
     private void broadcast_positions() {
-        if (this.channels.isEmpty()) {
+        if (this.plugin.websocket().connections_count() == 0) {
             return;
         }
 
@@ -86,11 +66,6 @@ public class PlayerTracker {
         message.addProperty("type", "player_positions");
         message.add("data", data);
 
-        final TextWebSocketFrame frame = new TextWebSocketFrame(NettyServer.GSON.toJson(message));
-        this.channels.writeAndFlush(frame, Channel::isActive).awaitUninterruptibly();
-    }
-
-    public ChannelGroup channels() {
-        return this.channels;
+        this.plugin.websocket().broadcast(message);
     }
 }

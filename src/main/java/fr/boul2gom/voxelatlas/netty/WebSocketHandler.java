@@ -25,7 +25,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
         this.channels.add(ctx.channel());
-        this.plugin.tracker().add_channel(ctx.channel());
+        this.plugin.websocket().add_channel(ctx.channel());
 
         super.channelActive(ctx);
     }
@@ -33,7 +33,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         this.channels.remove(ctx.channel());
-        this.plugin.tracker().remove_channel(ctx.channel());
+        this.plugin.websocket().remove_channel(ctx.channel());
 
         super.channelInactive(ctx);
     }
@@ -45,7 +45,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
             final String message = text_frame.text();
 
             VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Received WebSocket message: " + message);
-            //Handle different message types if needed
+            // Handle different message types if needed
         }
     }
 
@@ -58,6 +58,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
 
     /**
      * Get the channel group for broadcasting
+     * 
      * @return ChannelGroup with all active WebSocket connections
      */
     public ChannelGroup channels() {
@@ -66,6 +67,7 @@ public class WebSocketHandler extends SimpleChannelInboundHandler<WebSocketFrame
 
     /**
      * Get the number of active connections
+     * 
      * @return Number of active WebSocket connections
      */
     public int connections_count() {

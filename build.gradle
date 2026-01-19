@@ -75,6 +75,11 @@ if (!serverRunDir.exists()) {
 shadowJar {
     archiveClassifier.set('')
 
+    // Relocate dependencies to avoid conflicts
+    relocate 'org.slf4j', 'fr.boul2gom.voxelatlas.libs.slf4j'
+    relocate 'com.j256.ormlite', 'fr.boul2gom.voxelatlas.libs.ormlite'
+    relocate 'org.sejda', 'fr.boul2gom.voxelatlas.libs.sejda'
+
     // Only include dependencies from the 'shadow' configuration
     configurations = [project.configurations.shadow]
 
