@@ -60,8 +60,7 @@ dependencies {
     implementation(files("$hytale_home/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
     implementation 'io.netty:netty-all:4.2.9.Final'
 
-    shadow 'org.xerial:sqlite-jdbc:3.45.1.0'
-    shadow 'com.j256.ormlite:ormlite-jdbc:6.1'
+    shadow 'org.mapdb:mapdb:3.1.0'
     shadow 'org.sejda.imageio:webp-imageio:0.1.6'
 }
 
@@ -77,7 +76,6 @@ shadowJar {
 
     // Relocate dependencies to avoid conflicts
     relocate 'org.slf4j', 'fr.boul2gom.voxelatlas.libs.slf4j'
-    relocate 'com.j256.ormlite', 'fr.boul2gom.voxelatlas.libs.ormlite'
     relocate 'org.sejda', 'fr.boul2gom.voxelatlas.libs.sejda'
 
     // Only include dependencies from the 'shadow' configuration

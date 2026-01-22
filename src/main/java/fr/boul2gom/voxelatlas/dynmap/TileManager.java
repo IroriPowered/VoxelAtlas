@@ -3,276 +3,304 @@ package fr.boul2gom.voxelatlas.dynmap;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 
-import com.hypixel.hytale.server.core.universe.world.worldmap.WorldMapManager;
 import fr.boul2gom.voxelatlas.VoxelAtlas;
-import fr.boul2gom.voxelatlas.dynmap.cache.provider.MemoryTileCache;
-import fr.boul2gom.voxelatlas.dynmap.cache.provider.SQLiteTileCache;
+import fr.boul2gom.voxelatlas.dynmap.cache.CacheType;
 import fr.boul2gom.voxelatlas.dynmap.cache.TileCache;
-import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder;
+import fr.boul2gom.voxelatlas.dynmap.cache.provider.MemoryTileCache;
+import fr.boul2gom.voxelatlas.dynmap.data.ChunkAccessor;
 import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder.Format;
-
-import com.hypixel.hytale.math.util.ChunkUtil;
-import com.hypixel.hytale.server.core.universe.world.storage.ChunkStore;
-import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider.IndexedStorageCache;
-import com.hypixel.hytale.server.core.universe.world.storage.provider.IndexedStorageChunkStorageProvider.IndexedStorageChunkLoader;
-import com.hypixel.hytale.storage.IndexedStorageFile;
-import com.hypixel.hytale.component.Store;
+import fr.boul2gom.voxelatlas.dynmap.renderer.FlatRenderer;
+import fr.boul2gom.voxelatlas.dynmap.renderer.Renderer;
+import fr.boul2gom.voxelatlas.dynmap.renderer.RendererType;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import com.hypixel.hytale.math.vector.Vector3d;
-import fr.boul2gom.voxelatlas.dynmap.data.WorldDataProvider;
-
+/**
+ * Core component responsible for managing map tile operations.
+ * <p>
+ * This class coordinates tile generation, caching, and retrieval.
+ * It handles the flow between memory cache, persistent storage, and the
+ * renderer.
+ * </p>
+ */
 public class TileManager {
 
+    /** The main plugin instance */
     private final VoxelAtlas plugin;
-    private final ExecutorService generation_executor;
+    /** Executor for fast, interactive tile requests */
+    private final ExecutorService interactive_executor;
+    /** Executor for slow background tasks */
+    private final ExecutorService background_executor;
 
+    /** A map of pending tile requests to prevent duplicate processing */
     private final ConcurrentHashMap<String, CompletableFuture<byte[]>> requests;
+    /** The in-memory L1 cache */
     private final TileCache memory_cache;
-    private final TileCache sqlite_cache;
+    /** The persistent L2 cache (filesystem or database) */
+    private final TileCache persistent_cache;
 
+    /** The renderer implementation used to generate tiles */
+    private final Renderer flat_renderer;
+
+    /**
+     * Create a new tile manager.
+     * <p>
+     * Initializes the caches (memory and persistent based on config) and the thread
+     * pools.
+     * </p>
+     *
+     * @param plugin The VoxelAtlas plugin instance.
+     */
     public TileManager(VoxelAtlas plugin) {
         this.plugin = plugin;
-        this.generation_executor = Executors.newFixedThreadPool(4); // Limit to 4 concurrent generations
+        this.interactive_executor = Executors.newFixedThreadPool(4); // fast interactive response
+        this.background_executor = Executors.newFixedThreadPool(1); // slow background tasks
 
         this.requests = new ConcurrentHashMap<>();
 
         this.memory_cache = new MemoryTileCache(500);
-        this.sqlite_cache = new SQLiteTileCache(plugin);
-        this.sqlite_cache.init();
 
-        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] Image encoder initialized:");
-        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - PNG: Available");
-        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - WebP: "
-                + (ImageEncoder.isFormatAvailable(Format.WEBP) ? "Available" : "Not available"));
-        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - Cache: Memory (500) + SQLite");
+        // Configurable Persistent Cache
+        final String cache_str = plugin.config().get().cache_type();
+        final CacheType cache_type = CacheType.from_id(cache_str);
+
+        this.persistent_cache = cache_type.create_persistent(plugin, "tiles");
+        this.persistent_cache.init();
+
+        this.flat_renderer = new FlatRenderer();
+
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas] TileManager initialized:");
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - Persistent Cache: " + this.persistent_cache.type());
+        VoxelAtlas.LOGGER.atInfo().log("[VoxelAtlas]   - Memory Cache: 500 items");
     }
 
     /**
-     * Fetch a tile with specified format
-     * 
-     * @param world  World name
-     * @param zoom   Zoom level
-     * @param tileX  Tile X coordinate
-     * @param tileZ  Tile Z coordinate
-     * @param format Image format (PNG or WebP)
-     * @return CompletableFuture with encoded tile data
+     * Gets the active persistent cache instance.
+     *
+     * @return The {@link TileCache} used for persistent storage.
      */
-    public CompletableFuture<byte[]> fetch_tile(String world, int zoom, int tileX, int tileZ, Format format) {
-        return this.memory_cache.get(world, zoom, tileX, tileZ, format).thenCompose(data -> {
-            if (data != null && data.length > 500) {
-                return CompletableFuture.completedFuture(data);
-            }
-            return this.sqlite_cache.get(world, zoom, tileX, tileZ, format).thenCompose(sqliteData -> {
-                if (sqliteData != null && sqliteData.length > 500) {
-                    this.memory_cache.put(world, zoom, tileX, tileZ, format, sqliteData);
-                    return CompletableFuture.completedFuture(sqliteData);
-                }
+    public TileCache persistent_cache() {
+        return this.persistent_cache;
+    }
 
-                final String key = this.create_key(world, zoom, tileX, tileZ, format);
+    /**
+     * Fetches a tile with the specified format and renderer settings.
+     * <p>
+     * This method applies a tiered cache strategy:
+     * <ol>
+     * <li>Check memory cache (L1).</li>
+     * <li>Check persistent cache (L2).</li>
+     * <li>Generate tile if missing (and update caches).</li>
+     * </ol>
+     * </p>
+     *
+     * @param world       The name of the world. Cannot be null.
+     * @param zoom        The zoom level of the tile.
+     * @param tile_x      The X coordinate of the tile.
+     * @param tile_z      The Z coordinate of the tile.
+     * @param format      The desired image format. Cannot be null.
+     * @param renderer    The renderer type to use. Cannot be null.
+     * @param interactive Whether this request is interactive (higher priority) or
+     *                    background.
+     * @param force       If true, bypasses checks for unexplored chunks and forces
+     *                    generation.
+     * @return A {@link CompletableFuture} containing the tile image data.
+     */
+    public CompletableFuture<byte[]> fetch_tile(String world, int zoom, int tile_x, int tile_z, Format format,
+            RendererType renderer, boolean interactive, boolean force) {
+        final String key = this.create_key(world, zoom, tile_x, tile_z, format, renderer);
 
-                final CompletableFuture<byte[]> pending = this.requests.get(key);
-                if (pending != null) {
-                    return pending;
-                }
-
-                final CompletableFuture<byte[]> future = this.generate_tile(world, zoom, tileX, tileZ, format);
-                this.requests.put(key, future);
-                future.whenComplete((res, ex) -> {
-                    this.requests.remove(key);
-                    if (res != null && ex == null) {
-                        this.memory_cache.put(world, zoom, tileX, tileZ, format, res);
-                        this.sqlite_cache.put(world, zoom, tileX, tileZ, format, res);
-
-                        // Notify clients of update
-                        this.broadcast_tile_update(world, tileX, tileZ, zoom);
+        // 1. Check Memory Cache
+        return this.memory_cache.get(world, zoom, tile_x, tile_z, format, renderer.name())
+                .thenCompose(memory_data -> {
+                    if (memory_data != null && memory_data.length > 0) {
+                        return CompletableFuture.completedFuture(memory_data);
                     }
+
+                    // 2. Check Persistent Cache
+                    return this.persistent_cache.get(world, zoom, tile_x, tile_z, format, renderer.name())
+                            .thenCompose(persistent_data -> {
+                                if (persistent_data != null && persistent_data.length > 0) {
+                                    this.memory_cache.put(world, zoom, tile_x, tile_z, format, renderer.name(),
+                                            persistent_data);
+                                    return CompletableFuture.completedFuture(persistent_data);
+                                }
+
+                                // 3. Generate
+                                final CompletableFuture<byte[]> pending = this.requests.get(key);
+                                if (pending != null) {
+                                    return pending;
+                                }
+
+                                final CompletableFuture<byte[]> future = this.generate_tile(world, zoom, tile_x, tile_z,
+                                        format, renderer, interactive, force);
+                                this.requests.put(key, future);
+
+                                future.whenComplete((res, ex) -> {
+                                    this.requests.remove(key);
+                                    if (res != null && ex == null && res.length > 0) {
+                                        this.memory_cache.put(world, zoom, tile_x, tile_z, format, renderer.name(),
+                                                res);
+                                        this.persistent_cache.put(world, zoom, tile_x, tile_z, format, renderer.name(),
+                                                res);
+
+                                        this.broadcast_tile_update(world, tile_x, tile_z, zoom);
+                                    } else {
+                                        if (ex != null) {
+                                            VoxelAtlas.LOGGER.atWarning().log("Tile generation failed for " + tile_x
+                                                    + "," + tile_z + ": " + ex.getMessage());
+                                        }
+                                    }
+                                });
+                                return future;
+                            });
                 });
-                return future;
-            });
-        });
     }
 
     /**
-     * Generate a tile with specified format
-     * 
-     * @param world_name World name
-     * @param zoom       Zoom level
-     * @param tileX      Tile X coordinate
-     * @param tileZ      Tile Z coordinate
-     * @param format     Image format (PNG or WebP)
-     * @return CompletableFuture with encoded tile data
+     * Generate a tile with specified format and renderer
      */
-    private CompletableFuture<byte[]> generate_tile(String world_name, int zoom, int tileX, int tileZ, Format format) {
-        final World world = Universe.get().getWorld(world_name);
-        if (world == null) {
-            return CompletableFuture.completedFuture(null);
-        }
+    /**
+     * Generates a new tile using the configured renderer.
+     *
+     * @param world_name  The name of the world to render.
+     * @param zoom        The zoom level.
+     * @param tile_x      The tile X coordinate.
+     * @param tile_z      The tile Z coordinate.
+     * @param format      The output image format.
+     * @param renderer    The renderer type.
+     * @param interactive Priority flag (unused here but passed for context).
+     * @param force       Whether to force generation even for unexplored areas.
+     * @return A {@link CompletableFuture} with the generated byte array.
+     */
+    private CompletableFuture<byte[]> generate_tile(String world_name, int zoom, int tile_x, int tile_z, Format format,
+            RendererType renderer, boolean interactive, boolean force) {
+        // Safety check using ChunkAccessor to prevent unwanted generation
+        if (zoom == 0) {
+            final World world = Universe.get().getWorld(world_name);
+            if (world != null) {
+                ChunkAccessor accessor = new ChunkAccessor(world);
 
-        // Check if the chunk is generated before attempting to render it
-        final boolean display_unexplored = this.plugin.config().get().display_unexplored();
-        boolean force_render = false;
+                // If NOT forced, check unexplored
+                if (!force) {
+                    return accessor.is_unexplored(tile_x, tile_z).thenCompose(unexplored -> {
+                        if (unexplored)
+                            return CompletableFuture.completedFuture(null);
 
-        if (!display_unexplored) {
-            final Vector3d spawn = WorldDataProvider.get_spawn(world);
-            final int spawnChunkX = ((int) spawn.x) >> 5;
-            final int spawnChunkZ = ((int) spawn.z) >> 5;
-            final int spawnRadius = this.plugin.config().get().spawn_radius();
-
-            // Check if tile is within spawn radius (using simple box check for speed)
-            if (Math.abs(tileX - spawnChunkX) <= spawnRadius && Math.abs(tileZ - spawnChunkZ) <= spawnRadius) {
-                force_render = true;
+                        // Use the renderer (which runs async internally usually)
+                        return this.flat_renderer.render(world_name, tile_x, tile_z, zoom, format);
+                    });
+                }
             }
         }
 
-        if (!display_unexplored && !force_render && this.is_unexplored(world, tileX, tileZ)) {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        final WorldMapManager map_manager = world.getWorldMapManager();
-
-        return CompletableFuture.supplyAsync(() -> {
-            return map_manager.getImageAsync(tileX, tileZ).join();
-        }, this.generation_executor).thenApply(image -> {
-            if (image == null)
-                return null;
-
-            return ImageEncoder.encode(image, 256, format);
-        }).exceptionally(ex -> {
-            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] - Failed to generate tile: " + ex.getMessage());
-            return null;
-        });
+        // Use the renderer (which runs async internally usually)
+        return this.flat_renderer.render(world_name, tile_x, tile_z, zoom, format);
     }
 
     /**
-     * Pregenerate tiles for a region with specified format
-     * 
-     * @param worldName World name
-     * @param centerX   Center X coordinate
-     * @param centerZ   Center Z coordinate
-     * @param radius    Radius in tiles
-     * @param format    Image format (PNG or WebP)
-     * @return CompletableFuture with number of generated tiles
+     * Pre-generates tiles for a specified area relative to the spawn or center.
+     *
+     * @param world_name The name of the world.
+     * @param center_x   The center X chunk coordinate.
+     * @param center_z   The center Z chunk coordinate.
+     * @param radius     The radius in chunks to pregenerate.
+     * @param format     The image format to use.
+     * @return A {@link CompletableFuture} that completes with the number of
+     *         generated tiles.
      */
-    public CompletableFuture<Integer> pregenerate(String worldName, int centerX, int centerZ, int radius,
+    public CompletableFuture<Integer> pregenerate(String world_name, int center_x, int center_z, int radius,
             Format format) {
-        final World world = Universe.get().getWorld(worldName);
+        final World world = Universe.get().getWorld(world_name);
         if (world == null)
             return CompletableFuture.completedFuture(0);
 
         return CompletableFuture.supplyAsync(() -> {
             int count = 0;
-            for (int x = centerX - radius; x <= centerX + radius; ++x) {
-                for (int z = centerZ - radius; z <= centerZ + radius; ++z) {
+
+            for (int x = center_x - radius; x <= center_x + radius; ++x) {
+                for (int z = center_z - radius; z <= center_z + radius; ++z) {
                     try {
-                        byte[] tile = this.fetch_tile(worldName, 0, x, z, format).join();
-                        if (tile != null && tile.length > 500) {
+                        final byte[] tile = this.fetch_tile(world_name, 0, x, z, format, RendererType.FLAT, false, true)
+                                .join();
+
+                        if (tile != null && tile.length > 0) {
                             ++count;
                         }
-
-                        Thread.sleep(10L);
-                    } catch (Exception exception) {
-                        VoxelAtlas.LOGGER.atSevere()
-                                .log("[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): "
-                                        + exception.getMessage());
+                    } catch (Exception e) {
+                        VoxelAtlas.LOGGER.atSevere().log(
+                                "[VoxelAtlas] - Failed to pregenerate tile (" + x + ", " + z + "): " + e.getMessage());
                     }
                 }
             }
+
             return count;
         });
     }
 
     /**
-     * Create a cache key for a tile with specified format
-     * 
-     * @param world  World name
-     * @param zoom   Zoom level
-     * @param x      Tile X coordinate
-     * @param z      Tile Z coordinate
-     * @param format Image format
-     * @return Cache key string
+     * Creates a unique cache key for a tile request.
+     *
+     * @param world    The world name.
+     * @param zoom     The zoom level.
+     * @param x        The tile X coordinate.
+     * @param z        The tile Z coordinate.
+     * @param format   The image format.
+     * @param renderer The renderer type.
+     * @return A slash-separated key string.
      */
-    public String create_key(String world, int zoom, int x, int z, Format format) {
-        return world + "/" + zoom + "/" + x + "/" + z + "/" + format.name().toLowerCase();
+    public String create_key(String world, int zoom, int x, int z, Format format, RendererType renderer) {
+        return world + "/" + zoom + "/" + x + "/" + z + "/" + format.extension() + "/" + renderer.id();
     }
 
     /**
-     * Check if a chunk is unexplored (not generated)
+     * Purges expired tiles from the persistent cache.
      *
-     * @param world  World
-     * @param chunkX Chunk X coordinate
-     * @param chunkZ Chunk Z coordinate
-     * @return true if the chunk is unexplored (not generated)
+     * @param max_age_ms The maximum age in milliseconds.
      */
-    public boolean is_unexplored(World world, int chunkX, int chunkZ) {
-        if (world == null)
-            return true;
-
-        final ChunkStore chunk_store = world.getChunkStore();
-
-        // Check storage (on disk)
-        try {
-            final Store<ChunkStore> store = chunk_store.getStore();
-
-            // This relies on the world using IndexedStorage
-            if (chunk_store.getLoader() instanceof IndexedStorageChunkLoader) {
-                final var cache = store.getResource(IndexedStorageCache.getResourceType());
-
-                int regionX = chunkX >> 5;
-                int regionZ = chunkZ >> 5;
-
-                // Checks if the region file exists
-                final IndexedStorageFile region_file = cache.getOrTryOpen(regionX, regionZ);
-                if (region_file != null) {
-                    int localX = chunkX & 0x1F;
-                    int localZ = chunkZ & 0x1F;
-                    int index = ChunkUtil.indexColumn(localX, localZ);
-
-                    // Check if the chunk index exists in the region file keys
-                    if (region_file.keys().contains(index)) {
-                        return false;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            VoxelAtlas.LOGGER.atSevere().log("[VoxelAtlas] Error checking chunk generation: " + e.getMessage());
-        }
-
-        return true;
-    }
-
     public void purge_expired(long max_age_ms) {
-        if (this.sqlite_cache != null) {
-            this.sqlite_cache.purge_expired(max_age_ms);
+        if (this.persistent_cache != null) {
+            this.persistent_cache.purge_expired(max_age_ms);
         }
     }
 
+    /**
+     * Shuts down the tile manager and releases all resources.
+     * <p>
+     * Closes caches and shuts down executor services.
+     * </p>
+     */
     public void close() {
-        if (this.sqlite_cache != null) {
-            this.sqlite_cache.close();
+        if (this.persistent_cache != null) {
+            this.persistent_cache.close();
         }
         if (this.memory_cache != null) {
             this.memory_cache.close();
         }
-        if (this.generation_executor != null) {
-            this.generation_executor.shutdown();
+        if (this.interactive_executor != null) {
+            this.interactive_executor.shutdown();
+        }
+        if (this.background_executor != null) {
+            this.background_executor.shutdown();
         }
     }
 
     /**
-     * Update tiles around a center point using a spiral pattern
-     * 
-     * @param worldName World name
-     * @param centerX   Center X coordinate
-     * @param centerZ   Center Z coordinate
-     * @param radius    Radius in tiles
+     * Triggers updates for a spiral of tiles around a center point.
+     * <p>
+     * Used to refresh the map view around a player or event.
+     * </p>
+     *
+     * @param world_name The world name.
+     * @param center_x   The center chunk X.
+     * @param center_z   The center chunk Z.
+     * @param radius     The radius in chunks.
      */
-    public void update_tiles_around(String worldName, int centerX, int centerZ, int radius) {
-        final World world = Universe.get().getWorld(worldName);
+    public void update_tiles_around(String world_name, int center_x, int center_z, int radius) {
+        final World world = Universe.get().getWorld(world_name);
         if (world == null)
             return;
 
@@ -283,36 +311,42 @@ public class TileManager {
         int dz = -1;
 
         // Max steps for a square of side 2*radius + 1
-        int max_steps = (2 * radius + 1) * (2 * radius + 1);
+        final int max_steps = (2 * radius + 1) * (2 * radius + 1);
 
         for (int i = 0; i < max_steps; i++) {
             if ((-radius <= x) && (x <= radius) && (-radius <= z) && (z <= radius)) {
-                final int tileX = centerX + x;
-                final int tileZ = centerZ + z;
-
-                this.fetch_tile(worldName, 0, tileX, tileZ, Format.PNG);
+                this.fetch_tile(world_name, 0, center_x + x, center_z + z, Format.PNG, RendererType.FLAT, false, false);
             }
 
             if ((x == z) || ((x < 0) && (x == -z)) || ((x > 0) && (x == 1 - z))) {
-                int t = dx;
+                final int temporary = dx;
                 dx = -dz;
-                dz = t;
+                dz = temporary;
             }
+
             x += dx;
             z += dz;
         }
     }
 
-    public void broadcast_tile_update(String worldName, int tileX, int tileZ, int zoom) {
+    /**
+     * Broadcasts a tile update event to all connected WebSocket clients.
+     *
+     * @param world  The world name.
+     * @param tile_x The tile X coordinate.
+     * @param tile_z The tile Z coordinate.
+     * @param zoom   The zoom level.
+     */
+    public void broadcast_tile_update(String world, int tile_x, int tile_z, int zoom) {
         if (this.plugin.websocket() == null || this.plugin.websocket().connections_count() == 0) {
             return;
         }
 
         final com.google.gson.JsonObject message = new com.google.gson.JsonObject();
         message.addProperty("type", "tile_update");
-        message.addProperty("world", worldName);
-        message.addProperty("x", tileX);
-        message.addProperty("z", tileZ);
+        message.addProperty("world", world);
+        message.addProperty("x", tile_x);
+        message.addProperty("z", tile_z);
         message.addProperty("zoom", zoom);
 
         this.plugin.websocket().broadcast(message);

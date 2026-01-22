@@ -8,8 +8,29 @@ import fr.boul2gom.voxelatlas.dynmap.data.WorldDataProvider;
 import fr.boul2gom.voxelatlas.netty.router.HttpRouter;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
+/**
+ * Handles HTTP requests for world and player information.
+ * <p>
+ * This handler provides endpoints to retrieve lists of available worlds and
+ * connected players.
+ * It uses the {@link WorldDataProvider} to aggregate this data.
+ * </p>
+ */
 public class WorldsHandler {
 
+    /**
+     * Registers the world handler routes.
+     * <p>
+     * Sets up:
+     * <ul>
+     * <li>GET /worlds/ - for a list of all worlds.</li>
+     * <li>GET /worlds/players?world=<name> - for a list of players in a specific
+     * world.</li>
+     * </ul>
+     * </p>
+     *
+     * @param plugin The VoxelAtlas plugin instance.
+     */
     public WorldsHandler(VoxelAtlas plugin) {
         final HttpRouter main = plugin.netty().main_router();
         final HttpRouter router = main.child_router("/worlds");

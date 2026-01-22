@@ -17,14 +17,35 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Netty channel handler for processing incoming HTTP requests.
+ * <p>
+ * This handler converts Netty {@link FullHttpRequest} objects into internal
+ * {@link HttpRequest} wrappers
+ * and dispatches them to the plugin's main
+ * {@link io.netty.handler.codec.http.router.Router} (via NettyServer).
+ * </p>
+ */
 public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
+    /** The main plugin instance */
     private final VoxelAtlas plugin;
 
+    /**
+     * Create a new HTTP server handler.
+     *
+     * @param plugin The VoxelAtlas plugin instance.
+     */
     public HttpServerHandler(VoxelAtlas plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * Reads and processes an incoming HTTP request.
+     *
+     * @param ctx The channel handler context.
+     * @param msg The full HTTP request message.
+     */
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest msg) {
         final HttpContext context = new HttpContext(ctx);
@@ -41,6 +62,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         }
     }
 
+    /**
+     * Parses query parameters from the request URI.
+     *
+     * @param uri The request URI.
+     * @return A list of parsed {@link HttpRequestParameter}s.
+     */
     private List<HttpRequestParameter> query_parameters(String uri) {
         final QueryStringDecoder decoder = new QueryStringDecoder(uri, StandardCharsets.UTF_8);
         final Map<String, List<String>> uri_params = decoder.parameters();
@@ -67,6 +94,12 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         ctx.close();
     }
 
+    /**
+     * Pipeline initializer for the HTTP server.
+     * <p>
+     * Sets up the Netty pipeline with codecs, aggregators, and handlers.
+     * </p>
+     */
     public static class Initializer extends ChannelInitializer<SocketChannel> {
 
         private final VoxelAtlas plugin;

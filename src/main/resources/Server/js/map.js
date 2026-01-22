@@ -1,14 +1,58 @@
 'use strict';
 
+// -- Configuration --
+const CONFIG = {
+    CHUNK_SIZE: 32,
+    TILE_SIZE: 256,
+    BATCH_DELAY: 300,
+    MAX_BATCH_SIZE: 2000,
+    ENDPOINTS: {
+        TILES: '/tiles',
+        WORLDS: '/worlds',
+        WEBSOCKET: `ws://${location.host}/ws/players`
+    }
+};
+
+const SCALE = CONFIG.TILE_SIZE / CONFIG.CHUNK_SIZE; // 8 Leaflet units per block
+
+// -- Utilities --
+
+/**
+ * Throttle function to limit execution frequency
+ */
+function throttle(func, limit) {
+    let in_throttle;
+    return function () {
+        const args = arguments;
+        const context = this;
+        if (!in_throttle) {
+            func.apply(context, args);
+            in_throttle = true;
+            setTimeout(() => in_throttle = false, limit);
+        }
+    }
+}
+
+function escape_html(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function rad_to_deg(rad) {
+    return rad * (180 / Math.PI);
+}
+
+// -- Custom Leaflet Layer --
+
 /**
  * Custom Leaflet TileLayer that batches requests to the backend
- * to avoid flooding the server with individual tile requests.
  */
 L.TileLayer.Batch = L.TileLayer.extend({
     options: {
-        batch_delay: 300,
-        max_batch_size: 2000,
-        batch_endpoint: '/tiles'
+        batch_delay: CONFIG.BATCH_DELAY,
+        max_batch_size: CONFIG.MAX_BATCH_SIZE,
+        batch_endpoint: CONFIG.ENDPOINTS.TILES
     },
 
     initialize: function (url_template, options) {
@@ -16,17 +60,33 @@ L.TileLayer.Batch = L.TileLayer.extend({
         this._pending_tiles = new Map();
         this._batch_timer = null;
         this._empty_tile_url = null;
-        this._world_name = 'world';
         this._is_sending = false;
         this._queued_while_sending = new Map();
+
+        // State
+        this._world_name = 'world';
+        this._renderer = 'FLAT';
     },
 
-    set_world: function (world_name) {
-        this._world_name = world_name;
+    updateParams: function (world, renderer) {
+        let changed = false;
+        if (world && this._world_name !== world) {
+            this._world_name = world;
+            changed = true;
+        }
+        if (renderer && this._renderer !== renderer) {
+            this._renderer = renderer;
+            changed = true;
+        }
+
+        if (changed) {
+            this.redraw();
+        }
     },
 
     getTileUrl: function (coords) {
-        return `/tiles?world=${this._world_name}&zoom=0&x=${coords.x}&z=${coords.y}`;
+        // Fallback or debug URL
+        return `${this.options.batch_endpoint}?world=${this._world_name}&renderer=${this._renderer}&zoom=0&x=${coords.x}&z=${coords.y}`;
     },
 
     createTile: function (coords, done) {
@@ -44,7 +104,6 @@ L.TileLayer.Batch = L.TileLayer.extend({
     },
 
     _queue_tile_request: function (key, coords, tile, done) {
-        // If we're currently sending, queue for next batch
         const target_map = this._is_sending ? this._queued_while_sending : this._pending_tiles;
 
         target_map.set(key, {
@@ -57,7 +116,6 @@ L.TileLayer.Batch = L.TileLayer.extend({
             clearTimeout(this._batch_timer);
         }
 
-        // Only auto-send if not currently sending and we hit a huge limit
         if (!this._is_sending && this._pending_tiles.size >= this.options.max_batch_size) {
             this._send_batch();
         } else if (!this._is_sending) {
@@ -73,7 +131,6 @@ L.TileLayer.Batch = L.TileLayer.extend({
         this._pending_tiles.clear();
         this._batch_timer = null;
 
-        // Split into chunks of 20 tiles max to avoid timeouts
         const CHUNK_SIZE = 20;
         const chunks = [];
         let current_chunk = new Map();
@@ -89,20 +146,15 @@ L.TileLayer.Batch = L.TileLayer.extend({
             chunks.push(current_chunk);
         }
 
-        console.log(`Sending ${all_tiles.size} tiles in ${chunks.length} batch(es)`);
-
-        // Send all chunks in parallel
         const chunk_promises = chunks.map(chunk => this._send_chunk(chunk));
 
         Promise.all(chunk_promises).finally(() => {
             this._is_sending = false;
-            // Process any tiles that were queued while we were sending
             if (this._queued_while_sending.size > 0) {
                 for (const [key, value] of this._queued_while_sending) {
                     this._pending_tiles.set(key, value);
                 }
                 this._queued_while_sending.clear();
-                // Schedule next batch
                 this._batch_timer = setTimeout(() => this._send_batch(), this.options.batch_delay);
             }
         });
@@ -110,14 +162,14 @@ L.TileLayer.Batch = L.TileLayer.extend({
 
     _send_chunk: async function (batch) {
         const tiles = [];
-        for (const [key, request] of batch) {
+        for (const [key, _] of batch) {
             const [zoom, x, y] = key.split('/').map(Number);
-            // Backend expects {zoom, x, z} where z corresponds to y in Leaflet coords
             tiles.push({ zoom, x, z: y });
         }
 
         const request_body = {
             world: this._world_name,
+            renderer: this._renderer,
             tiles: tiles
         };
 
@@ -148,7 +200,8 @@ L.TileLayer.Batch = L.TileLayer.extend({
             }
         } catch (error) {
             console.error('Batch chunk failed:', error);
-            for (const [key, request] of batch) {
+            // Retry logic could go here, or just fail tiles
+            for (const [_, request] of batch) {
                 request.done(error, request.tile);
             }
         }
@@ -167,375 +220,412 @@ L.tileLayer.batch = function (url_template, options) {
     return new L.TileLayer.Batch(url_template, options);
 };
 
-// -- Configuration --
-// 1 tile = 1 chunk = 32 blocks
-const CHUNK_SIZE = 32;
-const TILE_SIZE = 256;
-const SCALE = TILE_SIZE / CHUNK_SIZE;  // 8 - Leaflet units per block
+// -- Main Application Class --
 
-// -- State --
-let map = null;
-let tile_layer = null;
-let current_world = 'world';
-let worlds_info = {}; // Store world metadata (spawn, etc.)
-let websocket = null;
-let player_markers = {};
-let player_data = {};
-let reconnect_timer = null;
-let player_list_collapsed = false;
+class VoxelAtlasMap {
+    constructor() {
+        this.map = null;
+        this.tile_layer = null;
+        this.websocket = null;
+        this.reconnect_timer = null;
 
-// -- Initialization --
+        // State
+        this.current_world = 'world';
+        this.current_renderer = 'FLAT';
+        this.worlds_info = {};
 
-document.addEventListener('DOMContentLoaded', () => {
-    init_map();
-    load_worlds();
-    connect_websocket();
-    init_player_list_toggle();
-    document.getElementById('world-select').addEventListener('change', on_world_change);
+        this.players = new Map(); // uuid -> { data, marker }
+        this.player_list_collapsed = false;
 
-    // Refresh worlds list periodically
-    setInterval(load_worlds, 30_000);
-});
+        // Elements
+        this.els = {
+            coords: document.getElementById('coords-display'),
+            world_select: document.getElementById('world-select'),
+            renderer_select: document.getElementById('renderer-select'),
+            status: document.getElementById('connection-status'),
+            player_list: document.getElementById('player-list'),
+            player_count: document.getElementById('player-count-display'),
+            list_toggle: document.getElementById('player-list-toggle'),
+            list_content: document.getElementById('player-list-content')
+        };
 
-function init_map() {
-    // Using CRS.Simple: 1 unit = 1 pixel at zoom 0
-    // We want 1 unit = 1 block, so we need to scale tiles.
-    // Set large bounds to allow zooming out.
-    const world_bounds = L.latLngBounds(
-        L.latLng(-100_000, -100_000),
-        L.latLng(100_000, 100_000)
-    );
-
-    map = L.map('map', {
-        crs: L.CRS.Simple,
-        minZoom: -4,
-        maxZoom: 4,
-        zoomSnap: 0.5,
-        zoomDelta: 0.5,
-        maxBounds: world_bounds,
-        maxBoundsViscosity: 1.0
-    });
-
-    // Start at origin (will be updated when worlds load)
-    map.setView([0, 0], 0);
-
-    update_tile_layer();
-
-    map.on('mousemove', function (e) {
-        // Convert Leaflet coords to world coords (divide by scale factor)
-        // Negate lat because Leaflet's Y/Lat increases 'up', but Z increases 'down' in Minecrft (usually N=-Z)
-        // Actually here: Z is mapped to Y in leaflet.
-        // x = lng / scale
-        // z = -lat / scale
-        const x = Math.round(e.latlng.lng / SCALE);
-        const z = Math.round(-e.latlng.lat / SCALE);
-        document.getElementById('coords-display').textContent = `X: ${x}, Z: ${z}`;
-    });
-
-    map.attributionControl.addAttribution('VoxelAtlas');
-}
-
-function update_tile_layer() {
-    if (tile_layer) {
-        map.removeLayer(tile_layer);
+        this.init();
     }
 
-    // Batch tile layer - reduces HTTP requests by batching multiple tiles per request
-    tile_layer = L.tileLayer.batch('/tiles', {
-        tileSize: TILE_SIZE,
-        minNativeZoom: 0,
-        maxNativeZoom: 0,
-        minZoom: -4,
-        maxZoom: 4,
-        noWrap: true,
-        bounds: [[-100_000, -100_000], [100_000, 100_000]],
-        batch_delay: 300,
-        max_batch_size: 2000,
-        batch_endpoint: '/tiles'
-    });
+    init() {
+        this.init_map();
+        this.init_ui();
+        this.load_worlds();
+        this.connect_websocket();
 
-    tile_layer.set_world(current_world);
-    tile_layer.addTo(map);
-}
-
-// -- Helpers --
-
-/**
- * Convert world coords to LatLng
- */
-function world_to_latlng(x, z) {
-    // X -> lng, Z -> -lat (north is up, Z increases south)
-    // Multiply by SCALE since Leaflet uses tile-pixel coords (256px per 32-block chunk)
-    return L.latLng(-z * SCALE, x * SCALE);
-}
-
-function center_on_spawn() {
-    const info = worlds_info[current_world];
-    if (info && info.spawn) {
-        const pos = world_to_latlng(info.spawn.x, info.spawn.z);
-        map.setView(pos, 0);
-    } else {
-        map.setView([0, 0], 0);
+        // Periodic refresh
+        setInterval(() => this.load_worlds(), 30000);
     }
-}
 
-async function load_worlds() {
-    try {
-        const response = await fetch('/worlds');
-        if (!response.ok) throw new Error('Network response was not ok');
+    init_map() {
+        const world_bounds = L.latLngBounds(
+            L.latLng(-100000, -100000),
+            L.latLng(100000, 100000)
+        );
 
-        const data = await response.json();
-        const worlds = data.worlds;
+        this.map = L.map('map', {
+            crs: L.CRS.Simple,
+            minZoom: -4,
+            maxZoom: 4,
+            zoomSnap: 0.5,
+            zoomDelta: 0.5,
+            maxBounds: world_bounds,
+            maxBoundsViscosity: 1.0
+        }).setView([0, 0], 0);
 
-        // Update info map
-        worlds.forEach(w => {
-            worlds_info[w.name] = {
-                spawn: { x: w.spawn_x || 0, z: w.spawn_z || 0 }
-            };
+        this.tile_layer = L.tileLayer.batch(CONFIG.ENDPOINTS.TILES, {
+            tileSize: CONFIG.TILE_SIZE,
+            minNativeZoom: 0,
+            maxNativeZoom: 0,
+            minZoom: -4,
+            maxZoom: 4,
+            noWrap: true,
+            bounds: [[-100000, -100000], [100000, 100000]],
+            batch_delay: CONFIG.BATCH_DELAY,
+            max_batch_size: CONFIG.MAX_BATCH_SIZE
         });
 
-        const select = document.getElementById('world-select');
-        // Only rebuild options if empty or force refresh needed?
-        // Actually simplest is to rebuild but keep selection.
-        const previous_selection = select.value || current_world;
-        select.innerHTML = '';
+        this.update_layer_state();
+        this.tile_layer.addTo(this.map);
+
+        this.map.attributionControl.addAttribution('VoxelAtlas');
+
+        // Throttled mouse move
+        this.map.on('mousemove', throttle((e) => {
+            const x = Math.round(e.latlng.lng / SCALE);
+            const z = Math.round(-e.latlng.lat / SCALE);
+            if (this.els.coords) this.els.coords.textContent = `X: ${x}, Z: ${z}`;
+        }, 50));
+    }
+
+    init_ui() {
+        if (this.els.world_select) {
+            this.els.world_select.addEventListener('change', (e) => this.set_world(e.target.value));
+        }
+        if (this.els.renderer_select) {
+            this.els.renderer_select.addEventListener('change', (e) => this.set_renderer(e.target.value));
+        }
+        if (this.els.list_toggle && this.els.list_content) {
+            this.els.list_toggle.addEventListener('click', () => {
+                this.player_list_collapsed = !this.player_list_collapsed;
+                this.els.list_content.classList.toggle('collapsed', this.player_list_collapsed);
+                this.els.list_toggle.textContent = this.player_list_collapsed ? '+' : '-';
+            });
+        }
+
+        // Expose focus player global
+        window.focus_player = (uuid) => {
+            const p = this.players.get(uuid);
+            if (p) {
+                const pos = this.world_to_latlng(p.data.x, p.data.z);
+                this.map.setView(pos, 0);
+            }
+        };
+    }
+
+    update_layer_state() {
+        if (this.tile_layer) {
+            this.tile_layer.updateParams(this.current_world, this.current_renderer);
+        }
+    }
+
+    set_world(name) {
+        if (this.current_world === name) return;
+        this.current_world = name;
+        this.update_layer_state();
+        this.clear_players(); // Clear players from map, they will re-appear on next update if in new world
+        this.center_on_spawn();
+    }
+
+    set_renderer(name) {
+        if (this.current_renderer === name) return;
+        this.current_renderer = name;
+        this.update_layer_state();
+    }
+
+    world_to_latlng(x, z) {
+        return L.latLng(-z * SCALE, x * SCALE);
+    }
+
+    center_on_spawn() {
+        const info = this.worlds_info[this.current_world];
+        if (info && info.spawn) {
+            this.map.setView(this.world_to_latlng(info.spawn.x, info.spawn.z), 0);
+        } else {
+            this.map.setView([0, 0], 0);
+        }
+    }
+
+    async load_worlds() {
+        try {
+            const response = await fetch(CONFIG.ENDPOINTS.WORLDS);
+            if (!response.ok) throw new Error('Failed to load worlds');
+
+            const data = await response.json();
+            const worlds = data.worlds || [];
+
+            worlds.forEach(w => {
+                this.worlds_info[w.name] = {
+                    spawn: { x: w.spawn_x || 0, z: w.spawn_z || 0 }
+                };
+            });
+
+            this.update_world_select(worlds);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    update_world_select(worlds) {
+        if (!this.els.world_select) return;
+
+        const previous = this.els.world_select.value || this.current_world;
+        this.els.world_select.innerHTML = '';
 
         worlds.forEach(world => {
             const option = document.createElement('option');
             option.value = world.name;
             option.textContent = world.name;
-            if (world.name === previous_selection) option.selected = true;
-            select.appendChild(option);
+            if (world.name === previous) option.selected = true;
+            this.els.world_select.appendChild(option);
         });
 
-        if (worlds.length > 0) {
-            // If current world is not in list (or first load), select first
-            if (!worlds.find(w => w.name === current_world)) {
-                current_world = worlds[0].name;
-                update_tile_layer();
-                center_on_spawn(); // Center on first load/switch
-            }
-        }
-    } catch (e) {
-        console.error('Failed to load worlds:', e);
-    }
-}
-
-function on_world_change(e) {
-    current_world = e.target.value;
-    update_tile_layer();
-    clear_player_markers();
-    update_player_list();
-    center_on_spawn();
-}
-
-// -- Player Markers --
-
-function clear_player_markers() {
-    Object.values(player_markers).forEach(m => map.removeLayer(m));
-    player_markers = {};
-    player_data = {};
-}
-
-function rad_to_deg(rad) {
-    return rad * (180 / Math.PI);
-}
-
-function create_arrow_icon(yaw_radians) {
-    // Yaw is in radians, convert to degrees
-    const yaw_deg = rad_to_deg(yaw_radians);
-    const rotation = yaw_deg + 180;
-
-    return L.divIcon({
-        className: 'player-marker',
-        html: `<div class="player-arrow" style="transform: rotate(${rotation}deg);"></div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-    });
-}
-
-function update_arrow_rotation(marker, yaw_radians) {
-    const el = marker.getElement();
-    if (el) {
-        const arrow = el.querySelector('.player-arrow');
-        if (arrow) {
-            const yaw_deg = rad_to_deg(yaw_radians);
-            const rotation = yaw_deg + 180;
-            arrow.style.transform = `rotate(${rotation}deg)`;
+        if (worlds.length > 0 && !worlds.find(w => w.name === this.current_world)) {
+            // World list changed and current world is gone, or first load
+            this.current_world = worlds[0].name;
+            this.update_layer_state();
+            this.center_on_spawn();
         }
     }
-}
 
-// -- WebSocket --
+    // -- WebSocket --
 
-function connect_websocket() {
-    const status_el = document.getElementById('connection-status');
-    status_el.textContent = 'Connecting...';
-    status_el.className = 'connecting';
-
-    websocket = new WebSocket(`ws://${location.host}/ws/players`);
-
-    websocket.onopen = () => {
-        status_el.textContent = 'Connected';
-        status_el.className = 'connected';
-        if (reconnect_timer) {
-            clearTimeout(reconnect_timer);
-            reconnect_timer = null;
+    connect_websocket() {
+        if (this.els.status) {
+            this.els.status.textContent = 'Connecting...';
+            this.els.status.className = 'connecting';
         }
-        console.log("WebSocket connected to /ws/players");
-    };
 
-    websocket.onmessage = (e) => {
-        try {
-            const data = JSON.parse(e.data);
+        this.websocket = new WebSocket(CONFIG.ENDPOINTS.WEBSOCKET);
 
-            if (data.type === 'player_positions') {
-                const worlds_map = {};
-                if (Array.isArray(data.data)) {
-                    data.data.forEach(item => {
-                        worlds_map[item.world] = item.players;
-                    });
-                }
-                update_players(worlds_map);
-            } else if (data.type === 'tile_update') {
-                if (current_world !== data.world) return;
-
-                // Find tile in DOM
-                const selector = `img[data-x="${data.x}"][data-z="${data.z}"][data-zoom="${data.zoom}"]`;
-                const tile = document.querySelector(selector);
-
-                if (tile) {
-                    console.log(`Updating tile ${data.x}, ${data.z}`);
-                    // Force refresh
-                    tile.src = `/tiles?world=${data.world}&zoom=${data.zoom}&x=${data.x}&z=${data.z}&t=${Date.now()}`;
-                }
+        this.websocket.onopen = () => {
+            if (this.els.status) {
+                this.els.status.textContent = 'Connected';
+                this.els.status.className = 'connected';
             }
-        } catch (err) {
-            console.error("Error parsing WebSocket message:", err);
-        }
-    };
-
-    websocket.onclose = () => {
-        status_el.textContent = 'Disconnected';
-        status_el.className = 'disconnected';
-        console.log("WebSocket disconnected, retrying in 3s...");
-        if (!reconnect_timer) {
-            reconnect_timer = setTimeout(connect_websocket, 3000);
-        }
-    };
-
-    websocket.onerror = (err) => {
-        console.error("WebSocket error:", err);
-    };
-}
-
-function update_players(worlds_data) {
-    const players = worlds_data[current_world] || [];
-    const seen = new Set();
-    let count = 0;
-
-    // Reset player data store for current view (but preserve refs if needed? No, easy to rebuild)
-    // Actually we keep playerData to map uuid -> info
-    player_data = {};
-
-    players.forEach(p => {
-        seen.add(p.uuid);
-        count++;
-        const pos = world_to_latlng(p.x, p.z);
-        const yaw = p.yaw || 0;
-
-        // Store player data
-        player_data[p.uuid] = {
-            name: p.name,
-            uuid: p.uuid,
-            x: Math.round(p.x),
-            y: Math.round(p.y),
-            z: Math.round(p.z),
-            yaw: yaw
+            if (this.reconnect_timer) {
+                clearTimeout(this.reconnect_timer);
+                this.reconnect_timer = null;
+            }
+            console.log("WebSocket connected");
         };
 
-        if (player_markers[p.uuid]) {
-            player_markers[p.uuid].setLatLng(pos);
-            update_arrow_rotation(player_markers[p.uuid], yaw);
-        } else {
-            const marker = L.marker(pos, {
-                icon: create_arrow_icon(yaw)
+        this.websocket.onmessage = (e) => this.handle_message(e);
+
+        this.websocket.onclose = () => {
+            if (this.els.status) {
+                this.els.status.textContent = 'Disconnected';
+                this.els.status.className = 'disconnected';
+            }
+            if (!this.reconnect_timer) {
+                this.reconnect_timer = setTimeout(() => this.connect_websocket(), 3000);
+            }
+        };
+    }
+
+    handle_message(e) {
+        try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'player_positions') {
+                this.handle_player_positions(data.data);
+            } else if (data.type === 'tile_update') {
+                this.handle_tile_update(data);
+            }
+        } catch (err) {
+            console.error("WS Parsing Error:", err);
+        }
+    }
+
+    handle_tile_update(data) {
+        if (data.world !== this.current_world) return;
+
+        // Leaflet generic tile update approach? 
+        // We can find the tile img by selector
+        const selector = `img[data-x="${data.x}"][data-z="${data.z}"][data-zoom="${data.zoom}"]`;
+        const tile = document.querySelector(selector);
+        if (tile) {
+            const ts = Date.now();
+            tile.src = `${CONFIG.ENDPOINTS.TILES}?world=${data.world}&renderer=${this.current_renderer}&zoom=${data.zoom}&x=${data.x}&z=${data.z}&t=${ts}`;
+        }
+    }
+
+    // -- Players --
+
+    handle_player_positions(all_worlds_data) {
+        // Data format: [{ world: "name", players: [...] }]
+        // We only care about current world players for marker display
+
+        let current_world_players = [];
+        const world_data = all_worlds_data.find(d => d.world === this.current_world);
+        if (world_data) {
+            current_world_players = world_data.players;
+        }
+
+        const seen_uuids = new Set();
+
+        // Update markers
+        current_world_players.forEach(p => {
+            seen_uuids.add(p.uuid);
+            this.update_player_marker(p);
+        });
+
+        // Remove markers for players who left current world
+        for (const [uuid, p] of this.players) {
+            if (p.marker && !seen_uuids.has(uuid)) {
+                this.map.removeLayer(p.marker);
+                p.marker = null; // Detach marker
+            }
+            // Note: we might want to keep the player entry in this.players if we want to show global player list?
+            // For now, let's sync this.players to contain ONLY current world players + maybe cache?
+            // The requirement says "list of players per world" but UI design implies global list or local list?
+            // The previous code seemed to filter by world for the list too.
+            // Let's assume we want to track all players for the list, but only show markers for current world.
+        }
+
+        // Re-process for global player list update
+        // We need to flatten the data
+        const all_players = [];
+        all_worlds_data.forEach(wd => {
+            wd.players.forEach(p => {
+                p.world = wd.world; // Inject world name
+                all_players.push(p);
             });
+        });
+
+        this.update_players_store(all_players);
+        this.update_player_list_ui();
+
+        if (this.els.player_count) {
+            this.els.player_count.textContent = `Players: ${current_world_players.length}`;
+        }
+    }
+
+    update_players_store(new_data) {
+        const new_uuids = new Set(new_data.map(p => p.uuid));
+
+        // Remove obsolete
+        for (const [uuid, p] of this.players) {
+            if (!new_uuids.has(uuid)) {
+                if (p.marker) this.map.removeLayer(p.marker);
+                this.players.delete(uuid);
+            }
+        }
+
+        // Add/Update
+        new_data.forEach(p => {
+            let existing = this.players.get(p.uuid);
+            if (!existing) {
+                existing = { data: p, marker: null };
+                this.players.set(p.uuid, existing);
+            } else {
+                existing.data = p; // Update data
+            }
+        });
+    }
+
+    update_player_marker(p) {
+        const entry = this.players.get(p.uuid);
+        if (!entry) return;
+
+        const pos = this.world_to_latlng(p.x, p.z);
+        const yaw_deg = rad_to_deg(p.yaw || 0);
+
+        if (entry.marker) {
+            entry.marker.setLatLng(pos);
+            this.rotate_marker(entry.marker, yaw_deg);
+        } else {
+            const rotation = yaw_deg + 180;
+            const icon = L.divIcon({
+                className: 'player-marker',
+                html: `<div class="player-arrow" style="transform: rotate(${rotation}deg);"></div>`,
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            const marker = L.marker(pos, { icon: icon });
             marker.bindTooltip(p.name, {
                 permanent: false,
                 direction: 'top',
                 offset: [0, -12],
                 className: 'player-tooltip'
             });
-            marker.addTo(map);
-            player_markers[p.uuid] = marker;
+            marker.addTo(this.map);
+            entry.marker = marker;
         }
-    });
-
-    // Remove offline players
-    Object.keys(player_markers).forEach(uuid => {
-        if (!seen.has(uuid)) {
-            map.removeLayer(player_markers[uuid]);
-            delete player_markers[uuid];
-        }
-    });
-
-    document.getElementById('player-count-display').textContent = `Players: ${count}`;
-    update_player_list();
-}
-
-// -- Player List UI --
-
-function update_player_list() {
-    const list_el = document.getElementById('player-list');
-    const players = Object.values(player_data);
-
-    if (players.length === 0) {
-        list_el.innerHTML = '<li class="player-list-empty">No players online</li>';
-        return;
     }
 
-    // Sort by name
-    players.sort((a, b) => a.name.localeCompare(b.name));
-
-    list_el.innerHTML = players.map(p => `
-        <li data-uuid="${p.uuid}" onclick="window.focus_player('${p.uuid}')">
-            <span class="player-icon"></span>
-            <span class="player-name">${escape_html(p.name)}</span>
-            <span class="player-coords">${p.x}, ${p.z}</span>
-        </li>
-    `).join('');
-}
-
-function escape_html(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Exposed to global scope for onclick handler in HTML string
-window.focus_player = function (uuid) {
-    const p = player_data[uuid];
-    if (p) {
-        const pos = world_to_latlng(p.x, p.z);
-        map.setView(pos, 0);  // Zoom level 0 for good detail
-    }
-};
-
-function init_player_list_toggle() {
-    const toggle_btn = document.getElementById('player-list-toggle');
-    const content = document.getElementById('player-list-content');
-
-    if (toggle_btn && content) {
-        toggle_btn.addEventListener('click', () => {
-            player_list_collapsed = !player_list_collapsed;
-            if (player_list_collapsed) {
-                content.classList.add('collapsed');
-                toggle_btn.textContent = '+';
-            } else {
-                content.classList.remove('collapsed');
-                toggle_btn.textContent = '-';
+    rotate_marker(marker, yaw_deg) {
+        const el = marker.getElement();
+        if (el) {
+            const arrow = el.querySelector('.player-arrow');
+            if (arrow) {
+                arrow.style.transform = `rotate(${yaw_deg + 180}deg)`;
             }
-        });
+        }
+    }
+
+    clear_players() {
+        for (const p of this.players.values()) {
+            if (p.marker) {
+                this.map.removeLayer(p.marker);
+                p.marker = null;
+            }
+        }
+    }
+
+    update_player_list_ui() {
+        if (!this.els.player_list) return;
+
+        // Filter players for current world only? Previous code `update_players` implied only current world 
+        // variable `players` was derived from `worlds_data[current_world]`.
+        // So the list only showed players in the current world.
+        const visible_players = Array.from(this.players.values())
+            .map(e => e.data)
+            .filter(p => p.world === this.current_world)
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (visible_players.length === 0) {
+            this.els.player_list.innerHTML = '<li class="player-list-empty">No players online</li>';
+            return;
+        }
+
+        // Smart update could correspond to Diffing, but for < 100 players, rebuild is seemingly fast enough BUT
+        // the user asked for optimization. 
+        // Let's do a simple diff based on UUID to avoid flicker of images/selection state if any.
+
+        // However, innerHTML replacement is often fast enough for small lists. 
+        // Let's stick to innerHTML for simplicity but optimized generation
+
+        const html = visible_players.map(p => `
+            <li data-uuid="${p.uuid}" onclick="window.focus_player('${p.uuid}')">
+                <span class="player-icon"></span>
+                <span class="player-name">${escape_html(p.name)}</span>
+                <span class="player-coords">${Math.round(p.x)}, ${Math.round(p.z)}</span>
+            </li>
+        `).join('');
+
+        if (this.els.player_list.innerHTML !== html) {
+            this.els.player_list.innerHTML = html;
+        }
     }
 }
+
+// -- Initialization --
+
+document.addEventListener('DOMContentLoaded', () => {
+    window.voxel_map = new VoxelAtlasMap();
+});

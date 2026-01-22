@@ -1,5 +1,6 @@
 package fr.boul2gom.voxelatlas;
 
+import com.hypixel.hytale.builtin.buildertools.BlockColorIndex;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.math.vector.Vector3d;
@@ -25,36 +26,83 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Main plugin class for VoxelAtlas.
+ * <p>
+ * This class serves as the entry point for the plugin. It handles
+ * initialization,
+ * configuration loading, component instantiation (Netty server, TileManager,
+ * PlayerTracker),
+ * and resource cleanup on shutdown.
+ * </p>
+ */
 public class VoxelAtlas extends JavaPlugin {
 
+    /** The plugin-wide logger instance */
     public static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
+    /** The configuration wrapper */
     private final Config<Configuration> config;
 
+    /** The core tile management component */
     private TileManager tiles;
+    /** The player tracking component */
     private PlayerTracker tracker;
 
+    /** The Netty HTTP server */
     private NettyServer netty;
+    /** The WebSocket communication manager */
     private WebSocketManager websocket;
 
+    /**
+     * Called during plugin initialization by the server.
+     *
+     * @param init The initialization context.
+     */
     public VoxelAtlas(@Nonnull JavaPluginInit init) {
         super(init);
 
         this.config = this.withConfig("VoxelAtlas", Configuration.CODEC);
     }
 
+    /**
+     * Sets up the plugin components.
+     * <p>
+     * Initializes configuration, block colors, and core subsystems (WebSocket,
+     * TileManager, Netty).
+     * </p>
+     */
     @Override
     public void setup() {
         LOGGER.atInfo().log("[VoxelAtlas] Initializing...");
         this.config.load();
         this.config.save();
 
+        // Initialize BlockColorIndex singleton BEFORE renderers (thread-safe
+        // initialization)
+        LOGGER.atInfo().log("[VoxelAtlas] Initializing BlockColorIndex...");
+        final BlockColorIndex color_index = new BlockColorIndex();
+        // Force initialization now on main thread to avoid concurrent access issues
+        try {
+            color_index.isEmpty();
+        } catch (Exception e) {
+            LOGGER.atWarning().log("[VoxelAtlas] BlockColorIndex initialization warning: " + e.getMessage());
+        }
+
+        this.websocket = new WebSocketManager();
         this.tiles = new TileManager(this);
-        this.websocket = new WebSocketManager(this);
         this.tracker = new PlayerTracker(this);
 
         this.netty = new NettyServer(this, this.config.get().webserver_port());
     }
 
+    /**
+     * Starts the plugin.
+     * <p>
+     * Starts the Netty server, player tracker, and schedules periodic tasks
+     * for tile expiration and view radius updates.
+     * Also handles initial pre-generation if configured.
+     * </p>
+     */
     @Override
     public void start() {
         LOGGER.atInfo().log("[VoxelAtlas] Starting...");
@@ -94,7 +142,8 @@ public class VoxelAtlas extends JavaPlugin {
         }
 
         // Pregeneration (only on first start)
-        if (!this.config.get().pregenerate()) return;
+        if (!this.config.get().pregenerate())
+            return;
 
         final Path pregen_lock = this.data_directory().resolve("pregen_done");
         if (Files.exists(pregen_lock)) {
@@ -126,6 +175,12 @@ public class VoxelAtlas extends JavaPlugin {
         }, 5, TimeUnit.SECONDS);
     }
 
+    /**
+     * Shuts down the plugin.
+     * <p>
+     * Closes all subsystems (tiles, tracker, Netty, WebSocket) gracefully.
+     * </p>
+     */
     @Override
     public void shutdown() {
         if (this.tiles != null) {
@@ -142,26 +197,56 @@ public class VoxelAtlas extends JavaPlugin {
         }
     }
 
+    /**
+     * Gets the plugin configuration.
+     *
+     * @return The configuration wrapper.
+     */
     public Config<Configuration> config() {
         return this.config;
     }
 
+    /**
+     * Gets the tile manager.
+     *
+     * @return The {@link TileManager}.
+     */
     public TileManager tiles() {
         return this.tiles;
     }
 
+    /**
+     * Gets the player tracker.
+     *
+     * @return The {@link PlayerTracker}.
+     */
     public PlayerTracker tracker() {
         return this.tracker;
     }
 
+    /**
+     * Gets the Netty server instance.
+     *
+     * @return The {@link NettyServer}.
+     */
     public NettyServer netty() {
         return this.netty;
     }
 
+    /**
+     * Gets the plugin data directory path.
+     *
+     * @return The {@link Path} to the data directory.
+     */
     public Path data_directory() {
         return this.getDataDirectory();
     }
 
+    /**
+     * Gets the WebSocket manager.
+     *
+     * @return The {@link WebSocketManager}.
+     */
     public WebSocketManager websocket() {
         return this.websocket;
     }

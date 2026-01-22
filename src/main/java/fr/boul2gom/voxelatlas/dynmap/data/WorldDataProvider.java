@@ -8,18 +8,22 @@ import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
-
-/**
- * Provider for world and player data shared between HTTP and WebSocket handlers
- */
 import com.hypixel.hytale.server.core.universe.world.spawn.ISpawnProvider;
 
+/**
+ * Utility class for providing world and player data.
+ * <p>
+ * This class contains static methods to aggregate data about the server's
+ * worlds and players
+ * for consumption by the web interface.
+ * </p>
+ */
 public class WorldDataProvider {
 
     /**
-     * Get all available worlds with their player counts
-     * 
-     * @return JsonArray of world data
+     * Get all available worlds with their player counts.
+     *
+     * @return A {@link JsonArray} containing data objects for each world.
      */
     public static JsonArray available_worlds() {
         final JsonArray worlds = new JsonArray();
@@ -40,23 +44,29 @@ public class WorldDataProvider {
         return worlds;
     }
 
+    /**
+     * Gets the spawn point coordinates for a given world.
+     *
+     * @param world The {@link World} to get the spawn for. Cannot be null.
+     * @return A {@link Vector3d} representing the spawn coordinates. Returns
+     *         (0,0,0) if not found.
+     */
     public static Vector3d get_spawn(World world) {
         final ISpawnProvider provider = world.getWorldConfig().getSpawnProvider();
 
         if (provider != null) {
             final Transform global = provider.getSpawnPoint(world, world.getWorldConfig().getUuid());
-            if (global != null)
-                return global.getPosition();
+            if (global != null) return global.getPosition();
         }
 
         return new Vector3d(0, 0, 0);
     }
 
     /**
-     * Get all players in a specific world
-     * 
-     * @param world The world to get players from
-     * @return JsonArray of player data
+     * Get all players in a specific world.
+     *
+     * @param world The {@link World} to get players from. Cannot be null.
+     * @return A {@link JsonArray} of player data objects.
      */
     public static JsonArray available_players(World world) {
         final JsonArray players = new JsonArray();
@@ -70,10 +80,11 @@ public class WorldDataProvider {
     }
 
     /**
-     * Convert a PlayerRef to a JsonObject
-     * 
-     * @param player The player reference
-     * @return JsonObject with player data
+     * Convert a PlayerRef to a JsonObject.
+     *
+     * @param player The {@link PlayerRef} to convert. Cannot be null.
+     * @return A {@link JsonObject} containing the player's name, UUID, position,
+     *         and rotation.
      */
     private static JsonObject player_to_json(PlayerRef player) {
         final JsonObject player_data = new JsonObject();

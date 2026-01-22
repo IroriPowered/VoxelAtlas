@@ -3,120 +3,124 @@ package fr.boul2gom.voxelatlas.dynmap.encoder;
 import com.hypixel.hytale.protocol.packets.worldmap.MapImage;
 
 /**
- * Image encoder interface for map tiles
- * Supports multiple image formats (PNG, WebP)
+ * Image encoder interface for map tiles.
+ * <p>
+ * This class provides a centralized interface for encoding map images into
+ * various formats
+ * (currently supporting PNG). It handles format selection and delegates to
+ * specific encoder implementations.
+ * </p>
  */
 public class ImageEncoder {
 
     /**
-     * Image format enum
+     * Enumeration of supported image formats.
      */
     public enum Format {
-        PNG("image/png", "png"),
-        WEBP("image/webp", "webp");
+        /** PNG format (image/png) */
+        PNG("image/png", "png");
 
-        private final String mimeType;
+        /** The MIME type string */
+        private final String mime;
+        /** The file extension string */
         private final String extension;
 
-        Format(String mimeType, String extension) {
-            this.mimeType = mimeType;
+        /**
+         * Create a new format.
+         *
+         * @param mime      The MIME type of the format.
+         * @param extension The file extension of the format.
+         */
+        Format(String mime, String extension) {
+            this.mime = mime;
             this.extension = extension;
         }
 
-        public String getMimeType() {
-            return mimeType;
-        }
-
-        public String getExtension() {
-            return extension;
+        /**
+         * Gets the MIME type of this format.
+         *
+         * @return The MIME type string.
+         */
+        public String mime_type() {
+            return this.mime;
         }
 
         /**
-         * Parse format from string
-         * @param format Format string (png, webp)
-         * @return Format enum, defaults to PNG if unknown
+         * Gets the file extension of this format.
+         *
+         * @return The file extension string.
          */
-        public static Format fromString(String format) {
-            if (format == null) {
-                return PNG;
-            }
+        public String extension() {
+            return this.extension;
+        }
 
-            try {
-                return Format.valueOf(format.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                return PNG;
-            }
+        /**
+         * Parses a format from a string.
+         *
+         * @param format The format name string (e.g., "png", "webp").
+         * @return The matching {@link Format} enum value, or defaults to
+         *         {@link Format#PNG} if unknown.
+         */
+        public static Format from_format(String format) {
+            return PNG;
         }
     }
 
     /**
-     * Encode a MapImage to the specified format
-     * @param image The map image to encode
-     * @param outputSize The desired output size
-     * @param format The image format
-     * @return Encoded byte array
+     * Encodes a MapImage to the specified format.
+     *
+     * @param image       The {@link MapImage} to encode. Cannot be null.
+     * @param output_size The desired output width/height in pixels.
+     * @param format      The target {@link Format}. Cannot be null.
+     * @return A byte array containing the encoded image data.
      */
-    public static byte[] encode(MapImage image, int outputSize, Format format) {
+    public static byte[] encode(MapImage image, int output_size, Format format) {
         return switch (format) {
-            case WEBP -> WebpEncoder.isAvailable()
-                ? WebpEncoder.encode(image, outputSize)
-                : PngEncoder.encode(image, outputSize);
-            case PNG -> PngEncoder.encode(image, outputSize);
+            case PNG -> PngEncoder.encode(image, output_size);
         };
     }
 
     /**
-     * Encode a MapImage to PNG format (default)
-     * @param image The map image to encode
-     * @param outputSize The desired output size
-     * @return Encoded byte array
+     * Encodes a MapImage to PNG format (default).
+     *
+     * @param image       The {@link MapImage} to encode. Cannot be null.
+     * @param output_size The desired output width/height in pixels.
+     * @return A byte array containing the encoded PNG data.
      */
-    public static byte[] encode(MapImage image, int outputSize) {
-        return encode(image, outputSize, Format.PNG);
+    public static byte[] encode(MapImage image, int output_size) {
+        return encode(image, output_size, Format.PNG);
     }
 
     /**
-     * Create an empty image in the specified format
-     * @param size The size of the empty image
-     * @param format The image format
-     * @return Encoded byte array
+     * Creates an empty (transparent) image in the specified format.
+     *
+     * @param size   The width/height of the empty image in pixels.
+     * @param format The target {@link Format}. Cannot be null.
+     * @return A byte array containing the encoded empty image.
      */
     public static byte[] empty(int size, Format format) {
         return switch (format) {
-            case WEBP -> WebpEncoder.isAvailable()
-                ? WebpEncoder.empty(size)
-                : PngEncoder.empty(size);
             case PNG -> PngEncoder.empty(size);
         };
     }
 
     /**
-     * Create an empty PNG image (default)
-     * @param size The size of the empty image
-     * @return Encoded byte array
+     * Creates an empty (transparent) PNG image (default).
+     *
+     * @param size The width/height of the empty image in pixels.
+     * @return A byte array containing the encoded empty PNG.
      */
     public static byte[] empty(int size) {
         return empty(size, Format.PNG);
     }
 
     /**
-     * Get the MIME type for a format
-     * @param format The image format
-     * @return MIME type string
+     * Gets the MIME type string for a given format.
+     *
+     * @param format The {@link Format} to get the MIME type for.
+     * @return The MIME type string (e.g., "image/png").
      */
-    public static String getMimeType(Format format) {
-        return format.getMimeType();
-    }
-
-    /**
-     * Check if a format is available
-     * @param format The image format to check
-     * @return true if the format is available
-     */
-    public static boolean isFormatAvailable(Format format) {
-        return switch (format) {
-            case PNG -> true;
-            case WEBP -> WebpEncoder.isAvailable();
-        };
+    public static String mime_type(Format format) {
+        return format.mime_type();
     }
 }

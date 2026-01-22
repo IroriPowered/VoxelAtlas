@@ -73,3 +73,9 @@ This plugin brings real-time dynamic mapping to Hytale servers, similar to Dynma
 3. Place the downloaded `.jar` file in your server's `Mods` folder
 4. Start your server
 6. Access the web interface at `http://your-server-ip:8080` (default port)
+7. Configure the plugin by editing the `VoxelAtlas.json` file located in the `Mods/VoxelAtlas` folder
+
+## 💡 Next features
+
+- [ ] Add support for more map markers
+- [ ] Add support for more map layers and take advantage of zoom levels

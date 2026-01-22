@@ -8,35 +8,60 @@ import java.awt.image.RenderedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
+/**
+ * Utility class for encoding map images to PNG format.
+ * <p>
+ * This class handles the low-level details of converting raw pixel data into a
+ * PNG file
+ * using {@link ImageIO}. It supports resizing the image during encoding.
+ * </p>
+ */
 public class PngEncoder {
 
-    public static byte[] encode(MapImage image, int outputSize) {
-        int srcWidth = image.width;
-        int srcHeight = image.height;
+    /**
+     * Encodes a MapImage to PNG format with resizing.
+     *
+     * @param image       The {@link MapImage} containing raw pixel data. Cannot be
+     *                    null.
+     * @param output_size The desired output width/height in pixels. The image will
+     *                    be scaled to this size.
+     * @return A byte array containing the encoded PNG data. Returns an empty array
+     *         on error.
+     */
+    public static byte[] encode(MapImage image, int output_size) {
+        final int src_width = image.width;
+        final int src_height = image.height;
         int[] data = image.data;
 
-        final BufferedImage buffered = new BufferedImage(outputSize, outputSize, 2);
+        final BufferedImage buffered = new BufferedImage(output_size, output_size, 2);
 
-        float scaleX = (float)srcWidth / (float)outputSize;
-        float scaleY = (float)srcHeight / (float)outputSize;
-        for (int y = 0; y < outputSize; ++y) {
-            for (int x = 0; x < outputSize; ++x) {
-                int srcX = Math.min((int)((float)x * scaleX), srcWidth - 1);
-                int srcY = Math.min((int)((float)y * scaleY), srcHeight - 1);
-                int srcIndex = srcY * srcWidth + srcX;
-                int rgba = data[srcIndex];
-                int r = rgba >> 24 & 0xFF;
-                int g = rgba >> 16 & 0xFF;
-                int b = rgba >> 8 & 0xFF;
-                int a = rgba & 0xFF;
-                int argb = a << 24 | r << 16 | g << 8 | b;
+        float scaleX = (float) src_width / (float) output_size;
+        float scaleY = (float) src_height / (float) output_size;
+        for (int y = 0; y < output_size; ++y) {
+            for (int x = 0; x < output_size; ++x) {
+                if (data == null) {
+                    data = new int[src_width * src_height];
+                    image.data = data;
+                }
+
+                final int src_x = Math.min((int) ((float) x * scaleX), src_width - 1);
+                final int src_y = Math.min((int) ((float) y * scaleY), src_height - 1);
+                final int src_index = src_y * src_width + src_x;
+
+                final int rgba = data[src_index];
+                final int r = rgba >> 24 & 0xFF;
+                final int g = rgba >> 16 & 0xFF;
+                final int b = rgba >> 8 & 0xFF;
+                final int a = rgba & 0xFF;
+
+                final int argb = a << 24 | r << 16 | g << 8 | b;
                 buffered.setRGB(x, y, argb);
             }
         }
 
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            ImageIO.write((RenderedImage)buffered, "png", out);
+            ImageIO.write((RenderedImage) buffered, "png", out);
         } catch (IOException e) {
             return new byte[0];
         }
@@ -44,12 +69,19 @@ public class PngEncoder {
         return out.toByteArray();
     }
 
+    /**
+     * Creates an empty (transparent) PNG image.
+     *
+     * @param size The width/height of the image in pixels.
+     * @return A byte array containing the encoded empty PNG data. Returns an empty
+     *         array on error.
+     */
     public static byte[] empty(int size) {
-        BufferedImage buffered = new BufferedImage(size, size, 2);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        final BufferedImage buffered = new BufferedImage(size, size, 2);
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
 
         try {
-            ImageIO.write((RenderedImage)buffered, "png", out);
+            ImageIO.write((RenderedImage) buffered, "png", out);
         } catch (IOException e) {
             return new byte[0];
         }
