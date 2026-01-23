@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * Represents a parsed HTTP request parameter.
  * <p>
- * A parameter can have multiple values (e.g., ?key=value1&key=value2).
+ * A parameter can have multiple values.
  * </p>
  * <p>
  * Constructor parameters:

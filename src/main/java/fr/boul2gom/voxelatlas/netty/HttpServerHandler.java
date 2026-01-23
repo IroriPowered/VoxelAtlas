@@ -23,7 +23,7 @@ import java.util.Map;
  * This handler converts Netty {@link FullHttpRequest} objects into internal
  * {@link HttpRequest} wrappers
  * and dispatches them to the plugin's main
- * {@link io.netty.handler.codec.http.router.Router} (via NettyServer).
+ * {@link fr.boul2gom.voxelatlas.netty.router.HttpRouter} (via NettyServer).
  * </p>
  */
 public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpRequest> {

@@ -26,7 +26,7 @@ import java.util.concurrent.CompletableFuture;
  * </ul>
  * </p>
  */
-public record ChunkAccessor(/* The Hytale world instance */ World world) {
+public record ChunkAccessor(/** The Hytale world instance */ World world) {
 
     /**
      * Create a new chunk accessor for the given world.

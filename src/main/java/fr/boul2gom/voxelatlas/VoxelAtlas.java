@@ -1,9 +1,10 @@
 package fr.boul2gom.voxelatlas;
 
-import com.hypixel.hytale.builtin.buildertools.BlockColorIndex;
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.server.core.command.system.CommandManager;
+import com.hypixel.hytale.server.core.command.system.CommandRegistry;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.universe.Universe;
@@ -18,6 +19,7 @@ import fr.boul2gom.voxelatlas.dynmap.encoder.ImageEncoder;
 import fr.boul2gom.voxelatlas.netty.NettyServer;
 import fr.boul2gom.voxelatlas.netty.WebSocketManager;
 import fr.boul2gom.voxelatlas.utils.Configuration;
+import fr.boul2gom.voxelatlas.utils.UpdateChecker;
 
 import javax.annotation.Nonnull;
 import java.nio.file.Files;
@@ -77,22 +79,16 @@ public class VoxelAtlas extends JavaPlugin {
         this.config.load();
         this.config.save();
 
-        // Initialize BlockColorIndex singleton BEFORE renderers (thread-safe
-        // initialization)
-        LOGGER.atInfo().log("[VoxelAtlas] Initializing BlockColorIndex...");
-        final BlockColorIndex color_index = new BlockColorIndex();
-        // Force initialization now on main thread to avoid concurrent access issues
-        try {
-            color_index.isEmpty();
-        } catch (Exception e) {
-            LOGGER.atWarning().log("[VoxelAtlas] BlockColorIndex initialization warning: " + e.getMessage());
-        }
+        new UpdateChecker(this).check();
 
         this.websocket = new WebSocketManager();
         this.tiles = new TileManager(this);
         this.tracker = new PlayerTracker(this);
 
         this.netty = new NettyServer(this, this.config.get().webserver_port());
+
+        final CommandRegistry commands = this.getCommandRegistry();
+        commands.registerCommand(new VoxelCommand(this));
     }
 
     /**
