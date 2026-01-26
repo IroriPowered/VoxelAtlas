@@ -161,9 +161,6 @@ public class TileManager {
     }
 
     /**
-     * Generate a tile with specified format and renderer
-     */
-    /**
      * Generates a new tile using the configured renderer.
      *
      * @param world_name  The name of the world to render.

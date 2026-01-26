@@ -98,7 +98,7 @@ public record ChunkAccessor(/** The Hytale world instance */ World world) {
                     int regionZ = chunkZ >> 5;
 
                     // Checks if the region file exists
-                    final IndexedStorageFile region_file = cache.getOrTryOpen(regionX, regionZ);
+                    final IndexedStorageFile region_file = cache.getOrTryOpen(regionX, regionZ, false);
                     if (region_file != null) {
                         int localX = chunkX & 0x1F;
                         int localZ = chunkZ & 0x1F;
