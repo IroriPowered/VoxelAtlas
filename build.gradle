@@ -47,6 +47,15 @@ javadoc {
 
 repositories {
     mavenCentral()
+
+		maven {
+        name = "hytale-release"
+        url = uri("https://maven.hytale.com/release")
+    }
+    maven {
+        name = "hytale-pre-release"
+        url = uri("https://maven.hytale.com/pre-release")
+    }
 }
 
 configurations {
@@ -57,7 +66,7 @@ configurations {
 // compile against their code. This requires you to have Hytale installed using
 // the official launcher for now.
 dependencies {
-    implementation(files("$hytale_home/install/$patchline/package/game/latest/Server/HytaleServer.jar"))
+    implementation("com.hypixel.hytale:Server:2026.01.22-6f8bdbdc4")
     implementation 'io.netty:netty-all:4.2.9.Final'
 
     shadow 'org.mapdb:mapdb:3.1.0'
